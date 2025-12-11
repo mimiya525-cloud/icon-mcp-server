@@ -1,4 +1,5 @@
 const axios = require('axios');
+const logger = require('./logger');
 
 // Element Plus 图标仓库信息
 const ELEMENT_PLUS_REPO_URL = 'https://api.github.com/repos/element-plus/element-plus-icons/contents/packages/svg';
@@ -39,8 +40,10 @@ function cleanSvgContent(svgContent) {
  */
 async function getElementPlusIcons(name) {
   try {
+    logger.info('Fetching Element Plus icons from GitHub', { searchTerm: name });
     const response = await axios.get(ELEMENT_PLUS_REPO_URL);
     const files = response.data;
+    logger.debug('Received Element Plus icons list', { totalFiles: files.length });
 
     // 过滤出SVG文件并进行模糊匹配
     const matchedIcons = files
@@ -51,10 +54,13 @@ async function getElementPlusIcons(name) {
         svgUrl: file.download_url
       }));
 
+    logger.debug('Filtered Element Plus icons', { matchedCount: matchedIcons.length });
+
     // 获取SVG内容
     const icons = [];
     for (const icon of matchedIcons) {
       try {
+        logger.debug('Fetching SVG content', { iconName: icon.name });
         const svgResponse = await axios.get(icon.svgUrl);
         const cleanedSvg = cleanSvgContent(svgResponse.data);
         icons.push({
@@ -63,14 +69,21 @@ async function getElementPlusIcons(name) {
           svg: svgResponse.data,
           rawSvg: cleanedSvg
         });
+        logger.debug('Successfully fetched SVG content', { iconName: icon.name });
       } catch (error) {
-        console.error(`Failed to fetch SVG for ${icon.name}:`, error.message);
+        logger.error(`Failed to fetch SVG for ${icon.name}`, { error: error.message });
       }
     }
 
+    logger.info('Finished fetching Element Plus icons', {
+      searchTerm: name,
+      matchedCount: matchedIcons.length,
+      successCount: icons.length
+    });
+
     return icons;
   } catch (error) {
-    console.error('Failed to fetch Element Plus icons:', error.message);
+    logger.error('Failed to fetch Element Plus icons', { error: error.message, stack: error.stack });
     return [];
   }
 }
@@ -82,8 +95,10 @@ async function getElementPlusIcons(name) {
  */
 async function getAntDesignIcons(name) {
   try {
+    logger.info('Fetching Ant Design icons from GitHub', { searchTerm: name });
     const response = await axios.get(ANT_DESIGN_REPO_URL);
     const files = response.data;
+    logger.debug('Received Ant Design icons list', { totalFiles: files.length });
 
     // 过滤出SVG文件并进行模糊匹配
     const matchedIcons = files
@@ -94,10 +109,13 @@ async function getAntDesignIcons(name) {
         svgUrl: file.download_url
       }));
 
+    logger.debug('Filtered Ant Design icons', { matchedCount: matchedIcons.length });
+
     // 获取SVG内容
     const icons = [];
     for (const icon of matchedIcons) {
       try {
+        logger.debug('Fetching SVG content', { iconName: icon.name });
         const svgResponse = await axios.get(icon.svgUrl);
         const cleanedSvg = cleanSvgContent(svgResponse.data);
         icons.push({
@@ -106,14 +124,21 @@ async function getAntDesignIcons(name) {
           svg: svgResponse.data,
           rawSvg: cleanedSvg
         });
+        logger.debug('Successfully fetched SVG content', { iconName: icon.name });
       } catch (error) {
-        console.error(`Failed to fetch SVG for ${icon.name}:`, error.message);
+        logger.error(`Failed to fetch SVG for ${icon.name}`, { error: error.message });
       }
     }
 
+    logger.info('Finished fetching Ant Design icons', {
+      searchTerm: name,
+      matchedCount: matchedIcons.length,
+      successCount: icons.length
+    });
+
     return icons;
   } catch (error) {
-    console.error('Failed to fetch Ant Design icons:', error.message);
+    logger.error('Failed to fetch Ant Design icons', { error: error.message, stack: error.stack });
     return [];
   }
 }

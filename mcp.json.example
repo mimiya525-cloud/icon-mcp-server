@@ -1,0 +1,34 @@
+{
+  "mcpServers": {
+    "icon-mcp-server": {
+      "command": "npx",
+      "args": ["-y", "icon-mcp-server"],
+      "env": {
+        "DASHSCOPE_API_KEY": "your_dashscope_api_key_here",
+        "WENXIN_API_KEY": "your_wenxin_api_key_here",
+        "WENXIN_SECRET_KEY": "your_wenxin_secret_key_here",
+        "ZHIPU_API_KEY": "your_zhipu_api_key_here",
+        "KIMI_API_KEY": "your_kimi_api_key_here",
+        "DOUBAO_API_KEY": "your_doubao_api_key_here",
+        "OPENAI_API_KEY": "your_openai_api_key_here",
+        "LOGGING_ENABLED": "true"
+      }
+    }
+  }
+}
+
+// ============================================
+// 本地开发配置（可选）
+// ============================================
+// 如果你需要本地开发或调试，可以使用以下配置：
+// {
+//   "mcpServers": {
+//     "icon-mcp-server": {
+//       "command": "node",
+//       "args": ["./icon-mcp-server-main/mcp-server.js"],
+//       "env": {
+//         "LOGGING_ENABLED": "true"
+//       }
+//     }
+//   }
+// }
