@@ -202,8 +202,10 @@ app.listen(PORT, '0.0.0.0', () => {
     .flat()
     .find(iface => !iface.internal && iface.family === 'IPv4')?.address || 'localhost';
     
-  console.log(`Server is running on port ${PORT}`);
-  console.log(`Access the server at: http://${ipAddress}:${PORT}`);
-  console.log(`Local access: http://localhost:${PORT}`);
-  logger.info('Icon MCP Server started', { port: PORT, host: '0.0.0.0' });
+  logger.info('Icon MCP Server started', { 
+    port: PORT, 
+    host: '0.0.0.0',
+    ipAddress: `http://${ipAddress}:${PORT}`,
+    localAccess: `http://localhost:${PORT}`
+  });
 });
