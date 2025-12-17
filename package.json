@@ -13,20 +13,14 @@
     "LICENSE"
   ],
   "bin": {
-    "icon-mcp": "cli.js",
+    "icon-mcp": "mcp-server.js",
     "icon-mcp-server": "mcp-server.js",
     "dt-query-icon": "mcp-server.js"
   },
   "scripts": {
     "start": "node index.js",
-    "start:logging": "LOGGING_ENABLED=true node index.js",
-    "start:debug": "LOGGING_ENABLED=true DEBUG=true node index.js",
     "start:mcp": "node mcp-server.js",
-    "start:gateway": "node mcp-gateway.js",
     "dev": "nodemon index.js",
-    "dev:logging": "LOGGING_ENABLED=true nodemon index.js",
-    "dev:mcp": "LOGGING_ENABLED=true node mcp-server.js",
-    "dev:gateway": "LOGGING_ENABLED=true node mcp-gateway.js",
     "build": "echo \"Build completed\"",
     "test": "echo \"Error: no test specified\" && exit 1"
   },

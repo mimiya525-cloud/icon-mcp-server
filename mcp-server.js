@@ -1,28 +1,12 @@
 #!/usr/bin/env node
-
-/**
- * MCP Server for Icon Search and Generation
- * 支持在 Cursor 中通过 mcp.json 配置使用
- */
-
-const path = require('path');
-
 // 先导入基础模块
-// const logger = require('./services/logger');
 const { getElementPlusIcons, getAntDesignIcons } = require('./services/icons');
 const { generateIcon } = require('./services/iconGenerator');
 const { z } = require('zod');
-
-// 声明MCP SDK相关变量
-let CallToolRequestSchema, ListToolsRequestSchema, CallToolResultSchema, ListToolsResultSchema;
 let McpServer, StdioServerTransport;
 
 // 声明全局变量
 let server;
-
-
-
-
 
 /**
  * 将图标数组转换为 markdown 表格格式
@@ -39,15 +23,16 @@ function iconsToMarkdownTable(icons) {
   markdown += '|---------|---------|-------------|\n';
 
   // 表格内容
-  icons.forEach(icon => {
+  icons.forEach((icon) => {
     const source = icon.source || '-';
     const name = icon.name || '-';
     // 使用 rawSvg（清理后的 SVG），直接输出原始 HTML，不做转义
     // 只处理换行符，将其替换为空格，以保持表格格式
     const svgCode = (icon.rawSvg || icon.svg || '-')
-      .replace(/\n/g, '')     // 将换行符替换为空格
-      .replace(/\r/g, '')      // 移除回车符
-      .replace(/\\"/g, '"').replace(/\\'/g, "'")
+      .replace(/\n/g, '') // 将换行符替换为空格
+      .replace(/\r/g, '') // 移除回车符
+      .replace(/\\"/g, '"')
+      .replace(/\\'/g, "'")
       // 移除多余转义符，并替换为空格
       .trim();
 
@@ -59,7 +44,6 @@ function iconsToMarkdownTable(icons) {
 }
 
 /** Register tool for searching icons by name */
-
 
 /** Main function to start the server */
 async function main() {
@@ -79,7 +63,9 @@ async function main() {
       // 如果直接包名导入失败，尝试使用相对路径
       const path = require('path');
       const mcpModule = await import(path.resolve(__dirname, 'node_modules/@modelcontextprotocol/sdk/server/index.js'));
-      const stdioModule = await import(path.resolve(__dirname, 'node_modules/@modelcontextprotocol/sdk/server/stdio.js'));
+      const stdioModule = await import(
+        path.resolve(__dirname, 'node_modules/@modelcontextprotocol/sdk/server/stdio.js')
+      );
 
       // 解构所需的类
       McpServer = mcpModule.Server;
@@ -95,23 +81,21 @@ async function main() {
       // Server info
       {
         name: 'icon-mcp-server',
-        version: '1.0.13',
+        version: '1.0.1',
       },
       // Options
       {
         capabilities: {
           protocolVersion: '1.0.0',
           tools: {
-            listChanged: true
-          }
-        }
+            listChanged: true,
+          },
+        },
       }
     );
 
-
-
     // 5. 注册search_icons工具
-    server.tool(
+    server.registerTool(
       'search_icons',
       '根据名称搜索图标，支持多个名称（逗号分隔）。支持搜索 Element Plus 和 Ant Design 图标库。',
       {
@@ -140,14 +124,11 @@ async function main() {
             const antDesignIcons = await getAntDesignIcons(name);
 
             allIcons.push(...elementPlusIcons, ...antDesignIcons);
-          } catch (error) {
-          }
+          } catch (error) { }
         }
 
         // 去重（基于 source 和 name）
-        const uniqueIcons = Array.from(
-          new Map(allIcons.map((icon) => [`${icon.source}-${icon.name}`, icon])).values()
-        );
+        const uniqueIcons = Array.from(new Map(allIcons.map((icon) => [`${icon.source}-${icon.name}`, icon])).values());
 
         // 生成 markdown 表格
         const markdownTable = iconsToMarkdownTable(uniqueIcons);
@@ -161,13 +142,22 @@ async function main() {
     );
 
     // 6. 注册generate_icon工具
-    server.tool(
+    server.registerTool(
       'generate_icon',
       '通过大模型生成图标，支持多种国产AI模型（通义千问、文心一言、智谱AI、Kimi、豆包等）',
       {
         description: z.string().describe('图标的描述，例如: "一个红色的删除按钮图标"'),
-        style: z.enum(['element-plus', 'ant-design', 'default']).optional().default('default').describe('图标风格，可选值: "element-plus", "ant-design", "default"'),
-        model: z.enum(['openai', 'tongyi', 'wenxin', 'zhipu', 'kimi', 'doubao']).optional().describe('指定使用的AI模型，可选值: "openai", "tongyi", "wenxin", "zhipu", "kimi", "doubao"。如果不指定，将自动选择可用的模型'),
+        style: z
+          .enum(['element-plus', 'ant-design', 'default'])
+          .optional()
+          .default('default')
+          .describe('图标风格，可选值: "element-plus", "ant-design", "default"'),
+        model: z
+          .enum(['openai', 'tongyi', 'wenxin', 'zhipu', 'kimi', 'doubao'])
+          .optional()
+          .describe(
+            '指定使用的AI模型，可选值: "openai", "tongyi", "wenxin", "zhipu", "kimi", "doubao"。如果不指定，将自动选择可用的模型'
+          ),
       },
       async ({ description, style = 'default', model = null }) => {
         if (!description) {
@@ -192,14 +182,11 @@ async function main() {
       }
     );
 
-
-
     // 9. 创建传输层并启动服务器
     const transport = new StdioServerTransport();
     await server.connect(transport);
     // logger.info('Icon MCP Server started');
   } catch (error) {
-    // 静默退出，避免输出非JSON内容
     process.exit(1);
   }
 }
