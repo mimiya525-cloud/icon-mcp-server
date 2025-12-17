@@ -1,9 +1,10 @@
 const axios = require('axios');
+// const logger = require('./logger');
 
 // Element Plus 图标仓库信息
 const ELEMENT_PLUS_REPO_URL = 'https://api.github.com/repos/element-plus/element-plus-icons/contents/packages/svg';
 // Ant Design 图标仓库信息
-const ANT_DESIGN_REPO_URL = 'https://api.github.com/repos/ant-design/ant-design-icons/contents/packages/icons-svg/svg/filled';
+const ANT_DESIGN_REPO_URL = 'https://api.github.com/repos/ant-design/ant-design-icons/contents/packages/icons-svg/svg/outlined';
 
 /**
  * 将短横线命名转换为驼峰命名
@@ -15,13 +16,16 @@ function toCamelCase(str) {
 }
 
 /**
- * 移除SVG中的XML声明和其他可能干扰显示的内容，并设置默认宽高
+ * 移除SVG中的XML声明和其他可能干扰显示的内容，并设置默认宽高和样式
  * @param {string} svgContent - 原始SVG内容
  * @returns {string} 清理后的SVG内容
  */
 function cleanSvgContent(svgContent) {
+  // 移除转义符
+  let cleanedSvg = svgContent.replace(/\\"/g, '"').replace(/\\'/g, "'");
+
   // 移除XML声明（如果存在）
-  let cleanedSvg = svgContent.replace(/<\?xml[^>]*\?>/g, '').trim();
+  cleanedSvg = cleanedSvg.replace(/<\?xml[^>]*\?>/g, '').trim();
 
   // 检查是否已有width和height属性
   if (!cleanedSvg.includes('width=') && !cleanedSvg.includes('height=')) {
@@ -29,7 +33,49 @@ function cleanSvgContent(svgContent) {
     cleanedSvg = cleanedSvg.replace(/<svg([^>]*)>/, `<svg$1 width="30px" height="30px">`);
   }
 
+  // 确保SVG可以在Markdown中正确预览
+  // 添加style属性确保图标居中显示
+  if (!cleanedSvg.includes('style=')) {
+    cleanedSvg = cleanedSvg.replace(/<svg([^>]*)>/, `<svg$1 style="display: inline-block; vertical-align: middle;">`);
+  }
+
+  // 移除可能存在的DOCTYPE声明
+  cleanedSvg = cleanedSvg.replace(/<!DOCTYPE[^>]*>/g, '').trim();
+
   return cleanedSvg;
+}
+
+/**
+ * 将图标数组转换为 markdown 表格格式
+ * @param {Array} icons - 图标数组
+ * @returns {string} markdown 表格字符串
+ */
+function iconsToMarkdownTable(icons) {
+  if (!icons || icons.length === 0) {
+    return '| 图标来源 | 图标名称 | 图标 SVG 代码 |\n|---------|---------|-------------|\n| - | - | - |';
+  }
+
+  // 表格头部
+  let markdown = '| 图标来源 | 图标名称 | 图标 SVG 代码 |\n';
+  markdown += '|---------|---------|-------------|\n';
+
+  // 表格内容
+  icons.forEach(icon => {
+    const source = icon.source || '-';
+    const name = icon.name || '-';
+    // 使用 rawSvg（清理后的 SVG），直接输出原始 HTML，不做转义
+    // 只处理换行符，将其替换为空格，以保持表格格式
+    const svgCode = (icon.rawSvg || icon.svg || '-')
+      .replace(/\n/g, '')     // 将换行符替换为空格
+      .replace(/\r/g, '')      // 移除回车符
+      .replace(/\\"/g, '"').replace(/\\'/g, "'")    // 移除多余转义符，并替换为空格
+      .trim();
+
+    // 直接输出 SVG 代码，不转义，以便在 markdown 中直接预览
+    markdown += `| ${source} | ${name} | ${svgCode} |\n`;
+  });
+
+  return markdown;
 }
 
 /**
@@ -39,8 +85,10 @@ function cleanSvgContent(svgContent) {
  */
 async function getElementPlusIcons(name) {
   try {
+    // logger.info('Fetching Element Plus icons from GitHub', { searchTerm: name });
     const response = await axios.get(ELEMENT_PLUS_REPO_URL);
     const files = response.data;
+    // logger.debug('Received Element Plus icons list', { totalFiles: files.length });
 
     // 过滤出SVG文件并进行模糊匹配
     const matchedIcons = files
@@ -51,10 +99,13 @@ async function getElementPlusIcons(name) {
         svgUrl: file.download_url
       }));
 
+    // logger.debug('Filtered Element Plus icons', { matchedCount: matchedIcons.length });
+
     // 获取SVG内容
     const icons = [];
     for (const icon of matchedIcons) {
       try {
+        // logger.debug('Fetching SVG content', { iconName: icon.name });
         const svgResponse = await axios.get(icon.svgUrl);
         const cleanedSvg = cleanSvgContent(svgResponse.data);
         icons.push({
@@ -63,14 +114,22 @@ async function getElementPlusIcons(name) {
           svg: svgResponse.data,
           rawSvg: cleanedSvg
         });
+        // logger.debug('Successfully fetched SVG content', { iconName: icon.name });
       } catch (error) {
-        console.error(`Failed to fetch SVG for ${icon.name}:`, error.message);
+        // logger.error(`Failed to fetch SVG for ${icon.name}`, { error: error.message });
       }
     }
 
+    // logger.info('Finished fetching Element Plus icons', {
+    //   searchTerm: name,
+    //   matchedCount: matchedIcons.length,
+    //   successCount: icons.length
+    // });
+
+    // 直接返回图标数组，不添加冗余的content字段
     return icons;
   } catch (error) {
-    console.error('Failed to fetch Element Plus icons:', error.message);
+    // logger.error('Failed to fetch Element Plus icons', { error: error.message, stack: error.stack });
     return [];
   }
 }
@@ -82,8 +141,10 @@ async function getElementPlusIcons(name) {
  */
 async function getAntDesignIcons(name) {
   try {
+    // logger.info('Fetching Ant Design icons from GitHub', { searchTerm: name });
     const response = await axios.get(ANT_DESIGN_REPO_URL);
     const files = response.data;
+    // logger.debug('Received Ant Design icons list', { totalFiles: files.length });
 
     // 过滤出SVG文件并进行模糊匹配
     const matchedIcons = files
@@ -94,31 +155,43 @@ async function getAntDesignIcons(name) {
         svgUrl: file.download_url
       }));
 
+    // logger.debug('Filtered Ant Design icons', { matchedCount: matchedIcons.length });
+
     // 获取SVG内容
     const icons = [];
     for (const icon of matchedIcons) {
       try {
+        // logger.debug('Fetching SVG content', { iconName: icon.name });
         const svgResponse = await axios.get(icon.svgUrl);
         const cleanedSvg = cleanSvgContent(svgResponse.data);
         icons.push({
           source: icon.source,
-          name: icon.name,
+          name: icon.name + 'Outlined',
           svg: svgResponse.data,
           rawSvg: cleanedSvg
         });
+        // logger.debug('Successfully fetched SVG content', { iconName: icon.name });
       } catch (error) {
-        console.error(`Failed to fetch SVG for ${icon.name}:`, error.message);
+        // logger.error(`Failed to fetch SVG for ${icon.name}`, { error: error.message });
       }
     }
 
+    // logger.info('Finished fetching Ant Design icons', {
+    //   searchTerm: name,
+    //   matchedCount: matchedIcons.length,
+    //   successCount: icons.length
+    // });
+
+    // 直接返回图标数组，不添加冗余的content字段
     return icons;
   } catch (error) {
-    console.error('Failed to fetch Ant Design icons:', error.message);
+    // logger.error('Failed to fetch Ant Design icons', { error: error.message, stack: error.stack });
     return [];
   }
 }
 
 module.exports = {
   getElementPlusIcons,
-  getAntDesignIcons
+  getAntDesignIcons,
+  iconsToMarkdownTable
 };
