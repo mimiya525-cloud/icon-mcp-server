@@ -8,14 +8,50 @@ const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio
 
 /** Create server instance */
 const server = new McpServer({
-  name: 'pickapicon-mcp',
-  version: '1.0.15',
+  name: 'icon-mcp-server',
+  version: '1.0.16',
 });
 
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }
+
+
+/**
+ * 将图标数组转换为 markdown 表格格式
+ * @param {Array} icons - 图标数组
+ * @returns {string} markdown 表格字符串
+ */
+function iconsToMarkdownTable(icons) {
+  if (!icons || icons.length === 0) {
+    return '| 图标来源 | 图标名称 | 图标 SVG 代码 |\n|---------|---------|-------------|\n| - | - | - |';
+  }
+
+  // 表格头部
+  let markdown = '| 图标来源 | 图标名称 | 图标 SVG 代码 |\n';
+  markdown += '|---------|---------|-------------|\n';
+
+  // 表格内容
+  icons.forEach(icon => {
+    const source = icon.source || '-';
+    const name = icon.name || '-';
+    // 使用 rawSvg（清理后的 SVG），直接输出原始 HTML，不做转义
+    // 只处理换行符，将其替换为空格，以保持表格格式
+    const svgCode = (icon.rawSvg || icon.svg || '-')
+      .replace(/\n/g, '')     // 将换行符替换为空格
+      .replace(/\r/g, '')      // 移除回车符
+      .replace(/\\"/g, '"').replace(/\\'/g, "'")
+      // 移除多余转义符，并替换为空格
+      .trim();
+
+    // 直接输出 SVG 代码，不转义，以便在 markdown 中直接预览
+    markdown += `| ${source} | ${name} | ${svgCode} |\n`;
+  });
+
+  return markdown;
+}
+
 
 // 5. 注册search_icons工具
 server.tool(
@@ -47,18 +83,17 @@ server.tool(
         const antDesignIcons = await getAntDesignIcons(name);
 
         allIcons.push(...elementPlusIcons, ...antDesignIcons);
-      } catch (error) {}
+      } catch (error) { }
     }
 
     // 去重（基于 source 和 name）
     const uniqueIcons = Array.from(new Map(allIcons.map((icon) => [`${icon.source}-${icon.name}`, icon])).values());
-
     // 生成 markdown 表格
     const markdownTable = iconsToMarkdownTable(uniqueIcons);
-
     // 仅返回 markdown 表格
     return {
       content: markdownTable,
+      data: uniqueIcons,
       isError: false,
     };
   }
@@ -88,7 +123,7 @@ server.tool(
       const generatedIcon = await generateIcon(description, style, model);
 
       return {
-        content: JSON.stringify(generatedIcon),
+        data: generatedIcon
       };
     } catch (error) {
       return {

@@ -1,6 +1,6 @@
 {
   "name": "icon-mcp-server",
-  "version": "1.0.15",
+  "version": "1.0.17",
   "description": "A backend server that provides icon search and generation service, supporting fuzzy search for icons from multiple icon libraries and AI-powered icon generation.",
   "main": "mcp-server.js",
   "files": [
@@ -47,12 +47,12 @@
     "node": ">=14.0.0"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.9.0",
+    "@modelcontextprotocol/sdk": "1.9.0",
     "axios": "^1.13.2",
     "cors": "^2.8.5",
     "express": "^5.2.1",
     "ws": "^8.18.3",
-    "zod": "^3.24.2"
+    "zod": "3.24.2"
   },
   "devDependencies": {
     "eventsource": "^4.1.0",
