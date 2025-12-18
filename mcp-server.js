@@ -10,7 +10,7 @@ const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio
 /** Create server instance */
 const server = new McpServer({
   name: 'icon-mcp-server',
-  version: '1.0.20',
+  version: '1.0.22',
 });
 
 async function main() {
@@ -60,8 +60,10 @@ server.tool(
   '根据名称搜索图标，支持多个名称（逗号分隔）。支持搜索 Element Plus 和 Ant Design 图标库。',
   {
     names: z.string().describe('图标名称，支持多个名称用逗号分隔，例如: "add,delete,edit"'),
+    prefix: z.string().optional().describe('图标库前缀，可选值: "ant-design", "element-plus"。如果不指定，将同时查询两个图标库'),
+    format: z.string().optional().describe('Ant Design图标格式，可选值: "outlined", "filled"。如果不指定，将返回两种格式的图标'),
   },
-  async ({ names }) => {
+  async ({ names, prefix, format }) => {
     if (!names) {
       return {
         content: [{ type: "text", text: 'Names parameter is required' }],
@@ -80,10 +82,20 @@ server.tool(
     // 对每个名称进行搜索
     for (const name of nameArray) {
       try {
-        const elementPlusIcons = await getElementPlusIcons(name);
-        const antDesignIcons = await getAntDesignIcons(name);
-
-        allIcons.push(...elementPlusIcons, ...antDesignIcons);
+        if (prefix === 'element-plus') {
+          // 只查询Element Plus图标
+          const elementPlusIcons = await getElementPlusIcons(name);
+          allIcons.push(...elementPlusIcons);
+        } else if (prefix === 'ant-design') {
+          // 只查询Ant Design图标
+          const antDesignIcons = await getAntDesignIcons(name, format);
+          allIcons.push(...antDesignIcons);
+        } else {
+          // 查询两个图标库
+          const elementPlusIcons = await getElementPlusIcons(name);
+          const antDesignIcons = await getAntDesignIcons(name, format);
+          allIcons.push(...elementPlusIcons, ...antDesignIcons);
+        }
       } catch (error) { }
     }
 
@@ -126,7 +138,7 @@ server.tool(
       const generatedIcon = await generateIcon(description, style, model);
 
       return {
-        content: [{ type: "text", text: 'Icon generated successfully' }],
+        content: [{ type: "text", text: JSON.stringify(generatedIcon) }],
         data: generatedIcon
       };
     } catch (error) {

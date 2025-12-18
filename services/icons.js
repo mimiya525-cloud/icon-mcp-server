@@ -1,11 +1,11 @@
 const axios = require('axios');
-// const logger = require('./logger');
 
 // Element Plus 图标仓库信息
 const ELEMENT_PLUS_REPO_URL = 'https://api.github.com/repos/element-plus/element-plus-icons/contents/packages/svg';
 // Ant Design 图标仓库信息
 const ANT_DESIGN_REPO_URL = 'https://api.github.com/repos/ant-design/ant-design-icons/contents/packages/icons-svg/svg/outlined';
-
+// Ant Design 图标仓库信息 FIlled
+const ANT_DESIGN_REPO_URL2 = 'https://api.github.com/repos/ant-design/ant-design-icons/contents/packages/icons-svg/svg/filled';
 /**
  * 将短横线命名转换为驼峰命名
  * @param {string} str - 短横线分隔的字符串
@@ -85,10 +85,8 @@ function iconsToMarkdownTable(icons) {
  */
 async function getElementPlusIcons(name) {
   try {
-    // logger.info('Fetching Element Plus icons from GitHub', { searchTerm: name });
     const response = await axios.get(ELEMENT_PLUS_REPO_URL);
     const files = response.data;
-    // logger.debug('Received Element Plus icons list', { totalFiles: files.length });
 
     // 过滤出SVG文件并进行模糊匹配
     const matchedIcons = files
@@ -99,13 +97,12 @@ async function getElementPlusIcons(name) {
         svgUrl: file.download_url
       }));
 
-    // logger.debug('Filtered Element Plus icons', { matchedCount: matchedIcons.length });
+
 
     // 获取SVG内容
     const icons = [];
     for (const icon of matchedIcons) {
       try {
-        // logger.debug('Fetching SVG content', { iconName: icon.name });
         const svgResponse = await axios.get(icon.svgUrl);
         const cleanedSvg = cleanSvgContent(svgResponse.data);
         icons.push({
@@ -114,37 +111,30 @@ async function getElementPlusIcons(name) {
           svg: svgResponse.data,
           rawSvg: cleanedSvg
         });
-        // logger.debug('Successfully fetched SVG content', { iconName: icon.name });
       } catch (error) {
-        // logger.error(`Failed to fetch SVG for ${icon.name}`, { error: error.message });
       }
     }
 
-    // logger.info('Finished fetching Element Plus icons', {
-    //   searchTerm: name,
-    //   matchedCount: matchedIcons.length,
-    //   successCount: icons.length
-    // });
+
 
     // 直接返回图标数组，不添加冗余的content字段
     return icons;
   } catch (error) {
-    // logger.error('Failed to fetch Element Plus icons', { error: error.message, stack: error.stack });
     return [];
   }
 }
 
 /**
- * 从Ant Design获取图标信息
+ * 从Ant Design特定格式获取图标信息
  * @param {string} name - 图标名称（模糊匹配）
+ * @param {string} url - 图标库URL
+ * @param {string} format - 图标格式（Outlined/Filled）
  * @returns {Promise<Array>} 匹配的图标数组
  */
-async function getAntDesignIcons(name) {
+async function getAntDesignIconsByFormat(name, url, format) {
   try {
-    // logger.info('Fetching Ant Design icons from GitHub', { searchTerm: name });
-    const response = await axios.get(ANT_DESIGN_REPO_URL);
+    const response = await axios.get(url);
     const files = response.data;
-    // logger.debug('Received Ant Design icons list', { totalFiles: files.length });
 
     // 过滤出SVG文件并进行模糊匹配
     const matchedIcons = files
@@ -155,37 +145,56 @@ async function getAntDesignIcons(name) {
         svgUrl: file.download_url
       }));
 
-    // logger.debug('Filtered Ant Design icons', { matchedCount: matchedIcons.length });
-
     // 获取SVG内容
     const icons = [];
     for (const icon of matchedIcons) {
       try {
-        // logger.debug('Fetching SVG content', { iconName: icon.name });
         const svgResponse = await axios.get(icon.svgUrl);
         const cleanedSvg = cleanSvgContent(svgResponse.data);
         icons.push({
           source: icon.source,
-          name: icon.name + 'Outlined',
+          name: icon.name + format,
           svg: svgResponse.data,
           rawSvg: cleanedSvg
         });
-        // logger.debug('Successfully fetched SVG content', { iconName: icon.name });
       } catch (error) {
-        // logger.error(`Failed to fetch SVG for ${icon.name}`, { error: error.message });
       }
     }
 
-    // logger.info('Finished fetching Ant Design icons', {
-    //   searchTerm: name,
-    //   matchedCount: matchedIcons.length,
-    //   successCount: icons.length
-    // });
-
-    // 直接返回图标数组，不添加冗余的content字段
     return icons;
   } catch (error) {
-    // logger.error('Failed to fetch Ant Design icons', { error: error.message, stack: error.stack });
+    return [];
+  }
+}
+
+/**
+ * 从Ant Design获取图标信息
+ * @param {string} name - 图标名称（模糊匹配）
+ * @param {string} format - 图标格式，可选值: "outlined", "filled"。如果不指定，将返回两种格式的图标
+ * @returns {Promise<Array>} 匹配的图标数组
+ */
+async function getAntDesignIcons(name, format) {
+  try {
+    // 根据format参数决定获取哪些格式的图标
+    if (format === 'outlined') {
+      // 只获取outlined格式的图标
+      const outlinedIcons = await getAntDesignIconsByFormat(name, ANT_DESIGN_REPO_URL, 'Outlined');
+      return outlinedIcons;
+    } else if (format === 'filled') {
+      // 只获取filled格式的图标
+      const filledIcons = await getAntDesignIconsByFormat(name, ANT_DESIGN_REPO_URL2, 'Filled');
+      return filledIcons;
+    } else {
+      // 同时获取outlined和filled格式的图标
+      const [outlinedIcons, filledIcons] = await Promise.all([
+        getAntDesignIconsByFormat(name, ANT_DESIGN_REPO_URL, 'Outlined'),
+        getAntDesignIconsByFormat(name, ANT_DESIGN_REPO_URL2, 'Filled')
+      ]);
+
+      // 合并两种格式的图标
+      return [...outlinedIcons, ...filledIcons];
+    }
+  } catch (error) {
     return [];
   }
 }
