@@ -2,6 +2,7 @@
 // 先导入基础模块
 const { getElementPlusIcons, getAntDesignIcons } = require('./services/icons');
 const { generateIcon } = require('./services/iconGenerator');
+const z = require('zod');
 
 const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
 const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio.js');
@@ -9,7 +10,7 @@ const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio
 /** Create server instance */
 const server = new McpServer({
   name: 'icon-mcp-server',
-  version: '1.0.16',
+  version: '1.0.20',
 });
 
 async function main() {
@@ -58,12 +59,12 @@ server.tool(
   'search_icons',
   '根据名称搜索图标，支持多个名称（逗号分隔）。支持搜索 Element Plus 和 Ant Design 图标库。',
   {
-    names: { description: '图标名称，支持多个名称用逗号分隔，例如: "add,delete,edit"' },
+    names: z.string().describe('图标名称，支持多个名称用逗号分隔，例如: "add,delete,edit"'),
   },
   async ({ names }) => {
     if (!names) {
       return {
-        content: 'Names parameter is required',
+        content: [{ type: "text", text: 'Names parameter is required' }],
         isError: true,
       };
     }
@@ -90,9 +91,14 @@ server.tool(
     const uniqueIcons = Array.from(new Map(allIcons.map((icon) => [`${icon.source}-${icon.name}`, icon])).values());
     // 生成 markdown 表格
     const markdownTable = iconsToMarkdownTable(uniqueIcons);
-    // 仅返回 markdown 表格
+    // 仅返回 markdown 表格，确保返回格式符合MCP协议要求
     return {
-      content: markdownTable,
+      content: [
+        {
+          type: "text",
+          text: markdownTable
+        }
+      ],
       data: uniqueIcons,
       isError: false,
     };
@@ -104,17 +110,14 @@ server.tool(
   'generate_icon',
   '通过大模型生成图标，支持多种国产AI模型（通义千问、文心一言、智谱AI、Kimi、豆包等）',
   {
-    description: { description: '图标的描述，例如: "一个红色的删除按钮图标"' },
-    style: { description: '图标风格，可选值: "element-plus", "ant-design", "default"' },
-    model: {
-      description:
-        '指定使用的AI模型，可选值: "openai", "tongyi", "wenxin", "zhipu", "kimi", "doubao"。如果不指定，将自动选择可用的模型',
-    },
+    description: z.string().describe('图标的描述，例如: "一个红色的删除按钮图标"'),
+    style: z.string().optional().default('default').describe('图标风格，可选值: "element-plus", "ant-design", "default"'),
+    model: z.string().optional().describe('指定使用的AI模型，可选值: "openai", "tongyi", "wenxin", "zhipu", "kimi", "doubao"。如果不指定，将自动选择可用的模型'),
   },
   async ({ description, style = 'default', model = null }) => {
     if (!description) {
       return {
-        content: '',
+        content: [{ type: "text", text: 'Description parameter is required' }],
         isError: true,
       };
     }
@@ -123,11 +126,12 @@ server.tool(
       const generatedIcon = await generateIcon(description, style, model);
 
       return {
+        content: [{ type: "text", text: 'Icon generated successfully' }],
         data: generatedIcon
       };
     } catch (error) {
       return {
-        content: JSON.stringify({ error: error.message }),
+        content: [{ type: "text", text: JSON.stringify({ error: error.message }) }],
         isError: true,
       };
     }
