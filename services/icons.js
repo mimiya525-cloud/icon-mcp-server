@@ -1,4 +1,6 @@
 const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
 
 // Element Plus 图标仓库信息
 const ELEMENT_PLUS_REPO_URL = 'https://api.github.com/repos/element-plus/element-plus-icons/contents/packages/svg';
@@ -6,6 +8,12 @@ const ELEMENT_PLUS_REPO_URL = 'https://api.github.com/repos/element-plus/element
 const ANT_DESIGN_REPO_URL = 'https://api.github.com/repos/ant-design/ant-design-icons/contents/packages/icons-svg/svg/outlined';
 // Ant Design 图标仓库信息 FIlled
 const ANT_DESIGN_REPO_URL2 = 'https://api.github.com/repos/ant-design/ant-design-icons/contents/packages/icons-svg/svg/filled';
+
+// 本地资源路径
+const BASE_PATH = path.join(__dirname, 'assets');
+const LOCAL_ELEMENT_PLUS_PATH = path.join(BASE_PATH, 'Element Plus/svg');
+const LOCAL_ANT_DESIGN_OUTLINED_PATH = path.join(BASE_PATH, 'Ant Design/svg/outlined');
+const LOCAL_ANT_DESIGN_FILLED_PATH = path.join(BASE_PATH, 'Ant Design/svg/filled');
 /**
  * 将短横线命名转换为驼峰命名
  * @param {string} str - 短横线分隔的字符串
@@ -81,44 +89,73 @@ function iconsToMarkdownTable(icons) {
 /**
  * 从Element Plus获取图标信息
  * @param {string} name - 图标名称（模糊匹配）
+ * @param {boolean} useLocal - 是否使用本地资源
  * @returns {Promise<Array>} 匹配的图标数组
  */
-async function getElementPlusIcons(name) {
+async function getElementPlusIcons(name, useLocal) {
   try {
-    const response = await axios.get(ELEMENT_PLUS_REPO_URL);
-    const files = response.data;
+    if (useLocal) {
+      // 从本地获取图标
+      const files = fs.readdirSync(LOCAL_ELEMENT_PLUS_PATH);
 
-    // 过滤出SVG文件并进行模糊匹配
-    const matchedIcons = files
-      .filter(file => file.name.endsWith('.svg') && file.name.toLowerCase().includes(name.toLowerCase()))
-      .map(file => ({
-        source: 'Element Plus',
-        name: toCamelCase(file.name.replace('.svg', '')),
-        svgUrl: file.download_url
-      }));
+      // 过滤出SVG文件并进行模糊匹配
+      const matchedIcons = files
+        .filter(file => file.endsWith('.svg') && file.toLowerCase().includes(name.toLowerCase()))
+        .map(file => ({
+          source: 'Element Plus',
+          name: toCamelCase(file.replace('.svg', '')),
+          localPath: path.join(LOCAL_ELEMENT_PLUS_PATH, file)
+        }));
 
-
-
-    // 获取SVG内容
-    const icons = [];
-    for (const icon of matchedIcons) {
-      try {
-        const svgResponse = await axios.get(icon.svgUrl);
-        const cleanedSvg = cleanSvgContent(svgResponse.data);
-        icons.push({
-          source: icon.source,
-          name: icon.name,
-          svg: svgResponse.data,
-          rawSvg: cleanedSvg
-        });
-      } catch (error) {
+      // 获取SVG内容
+      const icons = [];
+      for (const icon of matchedIcons) {
+        try {
+          const svgContent = fs.readFileSync(icon.localPath, 'utf8');
+          const cleanedSvg = cleanSvgContent(svgContent);
+          icons.push({
+            source: icon.source,
+            name: icon.name,
+            svg: svgContent,
+            rawSvg: cleanedSvg
+          });
+        } catch (error) {
+        }
       }
+
+      return icons;
+    } else {
+      // 从GitHub获取图标
+      const response = await axios.get(ELEMENT_PLUS_REPO_URL);
+      const files = response.data;
+
+      // 过滤出SVG文件并进行模糊匹配
+      const matchedIcons = files
+        .filter(file => file.name.endsWith('.svg') && file.name.toLowerCase().includes(name.toLowerCase()))
+        .map(file => ({
+          source: 'Element Plus',
+          name: toCamelCase(file.name.replace('.svg', '')),
+          svgUrl: file.download_url
+        }));
+
+      // 获取SVG内容
+      const icons = [];
+      for (const icon of matchedIcons) {
+        try {
+          const svgResponse = await axios.get(icon.svgUrl);
+          const cleanedSvg = cleanSvgContent(svgResponse.data);
+          icons.push({
+            source: icon.source,
+            name: icon.name,
+            svg: svgResponse.data,
+            rawSvg: cleanedSvg
+          });
+        } catch (error) {
+        }
+      }
+
+      return icons;
     }
-
-
-
-    // 直接返回图标数组，不添加冗余的content字段
-    return icons;
   } catch (error) {
     return [];
   }
@@ -129,39 +166,83 @@ async function getElementPlusIcons(name) {
  * @param {string} name - 图标名称（模糊匹配）
  * @param {string} url - 图标库URL
  * @param {string} format - 图标格式（Outlined/Filled）
+ * @param {boolean} useLocal - 是否使用本地资源
  * @returns {Promise<Array>} 匹配的图标数组
  */
-async function getAntDesignIconsByFormat(name, url, format) {
+async function getAntDesignIconsByFormat(name, url, format, useLocal = false) {
   try {
-    const response = await axios.get(url);
-    const files = response.data;
-
-    // 过滤出SVG文件并进行模糊匹配
-    const matchedIcons = files
-      .filter(file => file.name.endsWith('.svg') && file.name.toLowerCase().includes(name.toLowerCase()))
-      .map(file => ({
-        source: 'Ant Design',
-        name: toCamelCase(file.name.replace('.svg', '')),
-        svgUrl: file.download_url
-      }));
-
-    // 获取SVG内容
-    const icons = [];
-    for (const icon of matchedIcons) {
-      try {
-        const svgResponse = await axios.get(icon.svgUrl);
-        const cleanedSvg = cleanSvgContent(svgResponse.data);
-        icons.push({
-          source: icon.source,
-          name: icon.name + format,
-          svg: svgResponse.data,
-          rawSvg: cleanedSvg
-        });
-      } catch (error) {
+    if (useLocal) {
+      // 根据URL确定本地路径
+      let localPath;
+      if (url === ANT_DESIGN_REPO_URL) {
+        localPath = LOCAL_ANT_DESIGN_OUTLINED_PATH;
+      } else if (url === ANT_DESIGN_REPO_URL2) {
+        localPath = LOCAL_ANT_DESIGN_FILLED_PATH;
+      } else {
+        return [];
       }
-    }
 
-    return icons;
+      // 从本地获取图标
+      const files = fs.readdirSync(localPath);
+
+      // 过滤出SVG文件并进行模糊匹配
+      const matchedIcons = files
+        .filter(file => file.endsWith('.svg') && file.toLowerCase().includes(name.toLowerCase()))
+        .map(file => ({
+          source: 'Ant Design',
+          name: toCamelCase(file.replace('.svg', '')),
+          localPath: path.join(localPath, file)
+        }));
+
+      // 获取SVG内容
+      const icons = [];
+      for (const icon of matchedIcons) {
+        try {
+          const svgContent = fs.readFileSync(icon.localPath, 'utf8');
+          const cleanedSvg = cleanSvgContent(svgContent);
+          icons.push({
+            source: icon.source,
+            name: icon.name + format,
+            svg: svgContent,
+            rawSvg: cleanedSvg
+          });
+        } catch (error) {
+        }
+      }
+
+      return icons;
+    } else {
+      // 从GitHub获取图标
+      const response = await axios.get(url);
+      const files = response.data;
+
+      // 过滤出SVG文件并进行模糊匹配
+      const matchedIcons = files
+        .filter(file => file.name.endsWith('.svg') && file.name.toLowerCase().includes(name.toLowerCase()))
+        .map(file => ({
+          source: 'Ant Design',
+          name: toCamelCase(file.name.replace('.svg', '')),
+          svgUrl: file.download_url
+        }));
+
+      // 获取SVG内容
+      const icons = [];
+      for (const icon of matchedIcons) {
+        try {
+          const svgResponse = await axios.get(icon.svgUrl);
+          const cleanedSvg = cleanSvgContent(svgResponse.data);
+          icons.push({
+            source: icon.source,
+            name: icon.name + format,
+            svg: svgResponse.data,
+            rawSvg: cleanedSvg
+          });
+        } catch (error) {
+        }
+      }
+
+      return icons;
+    }
   } catch (error) {
     return [];
   }
@@ -171,24 +252,25 @@ async function getAntDesignIconsByFormat(name, url, format) {
  * 从Ant Design获取图标信息
  * @param {string} name - 图标名称（模糊匹配）
  * @param {string} format - 图标格式，可选值: "outlined", "filled"。如果不指定，将返回两种格式的图标
+ * @param {boolean} useLocal - 是否使用本地资源
  * @returns {Promise<Array>} 匹配的图标数组
  */
-async function getAntDesignIcons(name, format) {
+async function getAntDesignIcons(name, format, useLocal = false) {
   try {
     // 根据format参数决定获取哪些格式的图标
     if (format === 'outlined') {
       // 只获取outlined格式的图标
-      const outlinedIcons = await getAntDesignIconsByFormat(name, ANT_DESIGN_REPO_URL, 'Outlined');
+      const outlinedIcons = await getAntDesignIconsByFormat(name, ANT_DESIGN_REPO_URL, 'Outlined', useLocal);
       return outlinedIcons;
     } else if (format === 'filled') {
       // 只获取filled格式的图标
-      const filledIcons = await getAntDesignIconsByFormat(name, ANT_DESIGN_REPO_URL2, 'Filled');
+      const filledIcons = await getAntDesignIconsByFormat(name, ANT_DESIGN_REPO_URL2, 'Filled', useLocal);
       return filledIcons;
     } else {
       // 同时获取outlined和filled格式的图标
       const [outlinedIcons, filledIcons] = await Promise.all([
-        getAntDesignIconsByFormat(name, ANT_DESIGN_REPO_URL, 'Outlined'),
-        getAntDesignIconsByFormat(name, ANT_DESIGN_REPO_URL2, 'Filled')
+        getAntDesignIconsByFormat(name, ANT_DESIGN_REPO_URL, 'Outlined', useLocal),
+        getAntDesignIconsByFormat(name, ANT_DESIGN_REPO_URL2, 'Filled', useLocal)
       ]);
 
       // 合并两种格式的图标

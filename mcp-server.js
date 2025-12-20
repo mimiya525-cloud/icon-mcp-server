@@ -10,7 +10,7 @@ const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio
 /** Create server instance */
 const server = new McpServer({
   name: 'icon-mcp-server',
-  version: '1.0.22',
+  version: '1.1.0',
 });
 
 async function main() {
@@ -26,7 +26,7 @@ async function main() {
  */
 function iconsToMarkdownTable(icons) {
   if (!icons || icons.length === 0) {
-    return '| 图标来源 | 图标名称 | 图标 SVG 代码 |\n|---------|---------|-------------|\n| - | - | - |';
+    return '';
   }
 
   // 表格头部
@@ -42,8 +42,6 @@ function iconsToMarkdownTable(icons) {
     const svgCode = (icon.rawSvg || icon.svg || '-')
       .replace(/\n/g, '')     // 将换行符替换为空格
       .replace(/\r/g, '')      // 移除回车符
-      .replace(/\\"/g, '"').replace(/\\'/g, "'")
-      // 移除多余转义符，并替换为空格
       .trim();
 
     // 直接输出 SVG 代码，不转义，以便在 markdown 中直接预览
@@ -62,8 +60,9 @@ server.tool(
     names: z.string().describe('图标名称，支持多个名称用逗号分隔，例如: "add,delete,edit"'),
     prefix: z.string().optional().describe('图标库前缀，可选值: "ant-design", "element-plus"。如果不指定，将同时查询两个图标库'),
     format: z.string().optional().describe('Ant Design图标格式，可选值: "outlined", "filled"。如果不指定，将返回两种格式的图标'),
+    useLocal: z.boolean().optional().default(false).describe('是否使用本地资源'),
   },
-  async ({ names, prefix, format }) => {
+  async ({ names, prefix, format, useLocal }) => {
     if (!names) {
       return {
         content: [{ type: "text", text: 'Names parameter is required' }],
@@ -84,16 +83,16 @@ server.tool(
       try {
         if (prefix === 'element-plus') {
           // 只查询Element Plus图标
-          const elementPlusIcons = await getElementPlusIcons(name);
+          const elementPlusIcons = await getElementPlusIcons(name, useLocal);
           allIcons.push(...elementPlusIcons);
         } else if (prefix === 'ant-design') {
           // 只查询Ant Design图标
-          const antDesignIcons = await getAntDesignIcons(name, format);
+          const antDesignIcons = await getAntDesignIcons(name, format, useLocal);
           allIcons.push(...antDesignIcons);
         } else {
           // 查询两个图标库
-          const elementPlusIcons = await getElementPlusIcons(name);
-          const antDesignIcons = await getAntDesignIcons(name, format);
+          const elementPlusIcons = await getElementPlusIcons(name, useLocal);
+          const antDesignIcons = await getAntDesignIcons(name, format, useLocal);
           allIcons.push(...elementPlusIcons, ...antDesignIcons);
         }
       } catch (error) { }
