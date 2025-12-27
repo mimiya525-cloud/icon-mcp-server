@@ -6,13 +6,8 @@ const { getElementPlusIcons, getAntDesignIcons } = require('./icons');
  * 支持的 AI 模型类型
  */
 const AI_MODELS = {
-  OPENAI: 'openai',
   TONGYI: 'tongyi', // 通义千问（阿里云）
-  WENXIN: 'wenxin', // 文心一言（百度）
-  ZHIPU: 'zhipu', // 智谱AI（GLM）
-  KIMI: 'kimi', // 月之暗面（Kimi）
   DOUBAO: 'doubao', // 豆包（字节跳动）
-  HUGGINGFACE: 'huggingface', // Hugging Face（免费，无需 API Key）
 };
 
 /**
@@ -20,7 +15,7 @@ const AI_MODELS = {
  * @param {string} description - 图标描述
  * @param {string} style - 图标风格 (element-plus, ant-design, default)
  * @param {string} model - 指定使用的 AI 模型，如果不指定则自动选择
- * @returns {Promise<Object>} 生成的图标对象，格式与查询接口一致
+ * @returns {Promise<Array>} 生成的图标数组，格式与查询接口一致
  */
 async function generateIcon(description, style = 'default', model = null) {
   try {
@@ -28,63 +23,91 @@ async function generateIcon(description, style = 'default', model = null) {
 
     // 生成图标名称（基于描述）
     const iconName = generateIconName(description);
+    const allIcons = [];
 
-    // 尝试使用 AI 直接生成 SVG 代码
-    let svgContent = null;
-    let usedModel = model || 'fallback';
-
+    // 1. 尝试使用 AI 生成图标（如果有可用的模型）
+    let aiIcon = null;
     try {
       // 使用 AI 生成 SVG 代码
-      svgContent = await generateSVGCode(description, style, model);
-      usedModel = model || selectAvailableModel();
+      const svgContent = await generateSVGCode(description, style, model);
+      const usedModel = model || selectAvailableModel();
 
       // 验证生成的 SVG 是否有效
-      if (!svgContent || !isValidSVG(svgContent)) {
-        throw new Error('Generated SVG is invalid');
+      if (svgContent && isValidSVG(svgContent)) {
+        aiIcon = {
+          code: 0,
+          source: 'AI生成',
+          name: iconName,
+          svg: svgContent,
+          rawSvg: cleanSvgContent(svgContent),
+          description: description,
+          style: style,
+          model: usedModel,
+        };
+        allIcons.push(aiIcon);
       }
-
-      // 生成成功
-      const icon = {
-        code: 0,
-        source: 'AI Generated',
-        name: iconName,
-        svg: svgContent,
-        rawSvg: cleanSvgContent(svgContent),
-        description: description,
-        style: style,
-        model: usedModel,
-      };
-
-      // logger.info('Icon generated successfully', { iconName, style, model: usedModel });
-      return icon;
     } catch (error) {
-      // logger.error('Failed to generate SVG code', { error: error.message });
-      // 生成失败，返回失败响应
-      return {
+      // AI 生成失败，忽略并继续使用 Iconify
+    }
+
+    // 2. 从 Iconify 搜索图标
+    const iconifyIcons = await searchIconFromIconify(description);
+    allIcons.push(...iconifyIcons);
+
+    // 3. 确保返回 3 个图标（如果可能）
+    if (allIcons.length < 3) {
+      // 如果没有足够的图标，尝试从本地图标库搜索
+      const localIconsResult = await searchIconFromLibrary(description, style, true);
+      if (localIconsResult && localIconsResult.length > 0) {
+        // 添加本地图标到结果列表
+        allIcons.push(...localIconsResult.map(icon => ({
+          code: 0,
+          source: icon.source === 'Ant Design' ? 'Ant Design' : 'Element Plus',
+          name: icon.name,
+          svg: icon.svg,
+          rawSvg: icon.rawSvg || cleanSvgContent(icon.svg),
+          description: description,
+          style: style,
+          model: 'local',
+        })));
+      }
+    }
+
+    // 4. 如果还是不够，使用规则生成默认图标
+    while (allIcons.length < 3) {
+      const defaultSvg = generateSVGByRules(description, style);
+      const defaultIcon = {
         code: -1,
-        source: 'AI Generated (Fallback)',
-        name: iconName,
-        svg: '',
-        rawSvg: '',
+        source: 'AI生成',
+        name: `${iconName}-default-${allIcons.length + 1}`,
+        svg: defaultSvg,
+        rawSvg: cleanSvgContent(defaultSvg),
         description: description,
         style: style,
-        model: 'fallback',
+        model: 'default',
       };
+      allIcons.push(defaultIcon);
     }
+
+    // 返回前 3 个图标
+    return allIcons.slice(0, 3);
   } catch (error) {
     // logger.error('Failed to generate icon', { error: error.message, stack: error.stack });
-    // 如果所有模型都失败，返回失败响应
+    // 如果所有方法都失败，返回默认图标
     const iconName = generateIconName(description);
-    return {
-      code: -1,
-      source: 'AI Generated (Fallback)',
-      name: iconName,
-      svg: '',
-      rawSvg: '',
-      description: description,
-      style: style,
-      model: 'fallback',
-    };
+    const defaultSvg = generateSVGByRules(description, style);
+    return [
+      {
+        code: -1,
+        source: 'AI生成',
+        name: iconName,
+        svg: defaultSvg,
+        rawSvg: cleanSvgContent(defaultSvg),
+        description: description,
+        style: style,
+        model: 'default',
+      }
+    ];
   }
 }
 
@@ -95,11 +118,7 @@ function selectAvailableModel() {
   // 按优先级检查可用的模型
   const modelPriority = [
     AI_MODELS.TONGYI,
-    AI_MODELS.WENXIN,
-    AI_MODELS.ZHIPU,
-    AI_MODELS.KIMI,
     AI_MODELS.DOUBAO,
-    AI_MODELS.OPENAI,
   ];
 
   for (const model of modelPriority) {
@@ -108,8 +127,8 @@ function selectAvailableModel() {
     }
   }
 
-  // 如果都没有配置，使用免费的 Hugging Face（无需 API Key）
-  return AI_MODELS.HUGGINGFACE;
+  // 如果都没有配置，返回 null
+  return null;
 }
 
 /**
@@ -117,20 +136,10 @@ function selectAvailableModel() {
  */
 function hasApiKeyForModel(model) {
   switch (model) {
-    case AI_MODELS.OPENAI:
-      return !!(process.env.OPENAI_API_KEY || process.env.AI_API_KEY);
     case AI_MODELS.TONGYI:
       return !!process.env.DASHSCOPE_API_KEY;
-    case AI_MODELS.WENXIN:
-      return !!(process.env.WENXIN_API_KEY && process.env.WENXIN_SECRET_KEY);
-    case AI_MODELS.ZHIPU:
-      return !!process.env.ZHIPU_API_KEY;
-    case AI_MODELS.KIMI:
-      return !!process.env.KIMI_API_KEY;
     case AI_MODELS.DOUBAO:
       return !!process.env.DOUBAO_API_KEY;
-    case AI_MODELS.HUGGINGFACE:
-      return true; // Hugging Face 免费，无需 API Key
     default:
       return false;
   }
@@ -142,32 +151,17 @@ function hasApiKeyForModel(model) {
 async function tryFallbackModels(failedModel, prompt) {
   const fallbackModels = [
     AI_MODELS.TONGYI,
-    AI_MODELS.WENXIN,
-    AI_MODELS.ZHIPU,
-    AI_MODELS.KIMI,
     AI_MODELS.DOUBAO,
-    AI_MODELS.OPENAI,
-    AI_MODELS.HUGGINGFACE, // 免费备用方案
   ].filter((m) => m !== failedModel && hasApiKeyForModel(m));
 
   for (const model of fallbackModels) {
     try {
       // logger.info(`Trying fallback model: ${model}`);
       switch (model) {
-        case AI_MODELS.OPENAI:
-          return await generateWithOpenAI(prompt);
         case AI_MODELS.TONGYI:
           return await generateWithTongyi(prompt);
-        case AI_MODELS.WENXIN:
-          return await generateWithWenxin(prompt);
-        case AI_MODELS.ZHIPU:
-          return await generateWithZhipu(prompt);
-        case AI_MODELS.KIMI:
-          return await generateWithKimi(prompt);
         case AI_MODELS.DOUBAO:
           return await generateWithDoubao(prompt);
-        case AI_MODELS.HUGGINGFACE:
-          return await generateWithHuggingFace(prompt);
       }
     } catch (error) {
       // logger.info(`Fallback model ${model} also failed`, { error: error.message });
@@ -241,22 +235,22 @@ async function generateSVGCode(description, style, model = null) {
   try {
     // 如果指定了模型，使用指定的模型
     if (model) {
-      if (model === AI_MODELS.OPENAI && hasApiKeyForModel(AI_MODELS.OPENAI)) {
-        return await generateSVGWithOpenAI(prompt);
-      }
       if (model === AI_MODELS.TONGYI) {
         return await generateSVGWithTongyi(prompt);
       }
+      if (model === AI_MODELS.DOUBAO) {
+        return await generateSVGWithDoubao(prompt);
+      }
     }
 
-    // 优先尝试使用支持文本生成的模型（如 OpenAI GPT）
-    if (hasApiKeyForModel(AI_MODELS.OPENAI)) {
-      return await generateSVGWithOpenAI(prompt);
-    }
-
-    // 如果没有 OpenAI，尝试使用通义千问
+    // 优先尝试使用通义千问
     if (hasApiKeyForModel(AI_MODELS.TONGYI)) {
       return await generateSVGWithTongyi(prompt);
+    }
+
+    // 如果没有通义千问，尝试使用豆包
+    if (hasApiKeyForModel(AI_MODELS.DOUBAO)) {
+      return await generateSVGWithDoubao(prompt);
     }
 
     // 如果没有可用的文本生成模型，尝试从图标库查询
@@ -276,16 +270,85 @@ async function generateSVGCode(description, style, model = null) {
 }
 
 /**
- * 从图标库查询图标（作为备用方案）
+ * 从 Iconify 搜索图标
  */
-async function searchIconFromLibrary(description, style) {
+async function searchIconFromIconify(description) {
+  try {
+    // 从描述中提取关键词
+    const searchKeywords = extractSearchKeywords(description);
+    if (searchKeywords.length === 0) return [];
+
+    // 使用第一个关键词进行搜索
+    const keyword = searchKeywords[0];
+
+    // 构造搜索 URL
+    const searchUrl = `https://api.iconify.design/search?query=${encodeURIComponent(keyword)}&limit=10`;
+
+    // 发送请求
+    const response = await axios.get(searchUrl, {
+      timeout: 30000,
+    });
+
+    const results = response.data?.results || [];
+
+    // 处理结果，获取前 5 个图标
+    const icons = [];
+    for (const result of results.slice(0, 5)) {
+      try {
+        // 获取图标详情
+        const iconInfo = result?.icon;
+        if (!iconInfo) continue;
+
+        // 获取图标的 SVG 代码
+        const svgUrl = `https://api.iconify.design/${iconInfo.prefix}/${iconInfo.name}.svg`;
+        const svgResponse = await axios.get(svgUrl, {
+          timeout: 10000,
+        });
+
+        const svgContent = svgResponse.data;
+        if (!svgContent) continue;
+
+        // 清理 SVG 内容
+        const cleanedSvg = cleanSvgContent(svgContent);
+
+        // 添加到结果列表
+        icons.push({
+          source: `Iconify (${iconInfo.prefix})`,
+          name: iconInfo.name,
+          svg: svgContent,
+          rawSvg: cleanedSvg,
+        });
+
+        // 如果已经有 5 个图标，停止
+        if (icons.length >= 5) break;
+      } catch (error) {
+        // 单个图标获取失败，继续处理下一个
+        continue;
+      }
+    }
+
+    return icons;
+  } catch (error) {
+    // 搜索失败，返回空数组
+    return [];
+  }
+}
+
+/**
+ * 从图标库查询图标（作为备用方案）
+ * @param {string} description - 图标描述
+ * @param {string} style - 图标风格
+ * @param {boolean} returnAll - 是否返回所有匹配的图标（默认为false，只返回第一个）
+ * @returns {Promise<Array|string|null>} 如果returnAll为true，返回图标对象数组；否则返回第一个图标的SVG字符串
+ */
+async function searchIconFromLibrary(description, style, returnAll = false) {
   try {
     // 从描述中提取关键词用于搜索
     const searchKeywords = extractSearchKeywords(description);
 
     if (searchKeywords.length === 0) {
       // logger.warn('No search keywords extracted from description', { description });
-      return null;
+      return returnAll ? [] : null;
     }
 
     // 根据 style 决定搜索哪些图标库
@@ -294,20 +357,20 @@ async function searchIconFromLibrary(description, style) {
     if (!style || style === 'default') {
       // 两者都搜索
       for (const keyword of searchKeywords) {
-        const elementPlusIcons = await getElementPlusIcons(keyword);
-        const antDesignIcons = await getAntDesignIcons(keyword);
+        const elementPlusIcons = await getElementPlusIcons(keyword, true); // 强制使用本地 Element Plus 图标
+        const antDesignIcons = await getAntDesignIcons(keyword, undefined, true); // 强制使用本地 Ant Design 图标
         allIcons.push(...elementPlusIcons, ...antDesignIcons);
       }
     } else if (style === 'element-plus') {
       // 只搜索 Element Plus
       for (const keyword of searchKeywords) {
-        const elementPlusIcons = await getElementPlusIcons(keyword);
+        const elementPlusIcons = await getElementPlusIcons(keyword, true); // 强制使用本地 Element Plus 图标
         allIcons.push(...elementPlusIcons);
       }
     } else if (style === 'ant-design') {
       // 只搜索 Ant Design
       for (const keyword of searchKeywords) {
-        const antDesignIcons = await getAntDesignIcons(keyword);
+        const antDesignIcons = await getAntDesignIcons(keyword, undefined, true); // 强制使用本地 Ant Design 图标
         allIcons.push(...antDesignIcons);
       }
     }
@@ -319,21 +382,63 @@ async function searchIconFromLibrary(description, style) {
 
     if (uniqueIcons.length === 0) {
       // logger.info('No icons found in library', { description, style, keywords: searchKeywords });
-      return null;
+      return returnAll ? [] : null;
     }
 
-    // 返回第一个匹配的图标的 rawSvg
-    // logger.info('Found icon from library', {
-    //   description,
-    //   style,
-    //   iconName: uniqueIcons[0].name,
-    //   source: uniqueIcons[0].source
-    // });
-    return uniqueIcons[0].rawSvg || uniqueIcons[0].svg;
+    if (returnAll) {
+      // 返回所有匹配的图标对象
+      return uniqueIcons;
+    } else {
+      // 返回第一个匹配的图标的 rawSvg
+      // logger.info('Found icon from library', {
+      //   description,
+      //   style,
+      //   iconName: uniqueIcons[0].name,
+      //   source: uniqueIcons[0].source
+      // });
+      return uniqueIcons[0].rawSvg || uniqueIcons[0].svg;
+    }
   } catch (error) {
     // logger.error('Failed to search icon from library', { error: error.message });
-    return null;
+    return returnAll ? [] : null;
   }
+}
+
+/**
+ * 清理 SVG 内容
+ */
+function cleanSvgContent(svgContent) {
+  if (!svgContent) return '';
+
+  // 移除转义符
+  let cleanedSvg = svgContent.replace(/\\"/g, '"').replace(/\\'/g, "'");
+
+  // 移除 XML 声明（如果存在）
+  cleanedSvg = cleanedSvg.replace(/<\?xml[^>]*\?>/g, '').trim();
+
+  // 移除现有的 width 和 height 属性（如果存在）
+  cleanedSvg = cleanedSvg.replace(/width=["']?[^"'>\s]+["']?\s*/g, '');
+  cleanedSvg = cleanedSvg.replace(/height=["']?[^"'>\s]+["']?\s*/g, '');
+
+  // 在 svg 标签中添加固定的 width 和 height 属性（30x30像素）
+  cleanedSvg = cleanedSvg.replace(/<svg([^>]*)>/, `<svg$1 width="30px" height="30px">`);
+
+  // 确保 SVG 可以在 Markdown 中正确预览
+  // 添加 style 属性确保图标居中显示
+  if (!cleanedSvg.includes('style=')) {
+    cleanedSvg = cleanedSvg.replace(/<svg([^>]*)>/, `<svg$1 style="display: inline-block; vertical-align: middle;">`);
+  }
+
+  // 移除可能存在的 DOCTYPE 声明
+  cleanedSvg = cleanedSvg.replace(/<!DOCTYPE[^>]*>/g, '').trim();
+
+  // 处理换行符和多余空格
+  cleanedSvg = cleanedSvg
+    .replace(/\n/g, '')
+    .replace(/\r/g, '')
+    .trim();
+
+  return cleanedSvg;
 }
 
 /**
@@ -405,45 +510,7 @@ function extractSearchKeywords(description) {
   return keywords;
 }
 
-/**
- * 使用 OpenAI GPT 生成 SVG 代码
- */
-async function generateSVGWithOpenAI(prompt) {
-  const apiKey = process.env.OPENAI_API_KEY || process.env.AI_API_KEY;
-  if (!apiKey) {
-    throw new Error('OpenAI API key not found');
-  }
 
-  const response = await axios.post(
-    'https://api.openai.com/v1/chat/completions',
-    {
-      model: 'gpt-4o-mini', // 使用更便宜的模型
-      messages: [
-        {
-          role: 'system',
-          content: 'You are an expert SVG icon designer. Generate clean, simple SVG icons in the requested style. Output ONLY the SVG code, no explanations.'
-        },
-        {
-          role: 'user',
-          content: prompt
-        }
-      ],
-      temperature: 0.7,
-      max_tokens: 1000,
-    },
-    {
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      timeout: 30000,
-    }
-  );
-
-  const svgCode = response.data.choices[0].message.content.trim();
-  // 清理可能的 markdown 代码块标记
-  return svgCode.replace(/^```(?:svg|html)?\n?/i, '').replace(/\n?```$/i, '').trim();
-}
 
 /**
  * 使用通义千问生成 SVG 代码
@@ -483,6 +550,44 @@ async function generateSVGWithTongyi(prompt) {
     }
   );
   const svgCode = response.data.output.text.trim();
+  // 清理可能的 markdown 代码块标记
+  return svgCode.replace(/^```(?:svg|html)?\n?/i, '').replace(/\n?```$/i, '').trim();
+}
+
+/**
+ * 使用豆包生成 SVG 代码
+ */
+async function generateSVGWithDoubao(prompt) {
+  const apiKey = process.env.DOUBAO_API_KEY;
+  if (!apiKey) {
+    throw new Error('Doubao API key not found');
+  }
+  const response = await axios.post(
+    'https://ark.cn-beijing.volces.com/api/v3/chat/completions',
+    {
+      model: 'doubao-pro',
+      messages: [
+        {
+          role: 'system',
+          content: 'You are an expert SVG icon designer. Generate clean, simple SVG icons in the requested style. Output ONLY the SVG code, no explanations.'
+        },
+        {
+          role: 'user',
+          content: prompt
+        }
+      ],
+      temperature: 0.7,
+      max_tokens: 1000,
+    },
+    {
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      timeout: 30000,
+    }
+  );
+  const svgCode = response.data.choices[0].message.content.trim();
   // 清理可能的 markdown 代码块标记
   return svgCode.replace(/^```(?:svg|html)?\n?/i, '').replace(/\n?```$/i, '').trim();
 }
@@ -951,11 +1056,33 @@ function generateIconName(description) {
  * 清理 SVG 内容
  */
 function cleanSvgContent(svgContent) {
-  let cleanedSvg = svgContent.replace(/<\?xml[^>]*\?>/g, '').trim();
+  // 移除转义符
+  let cleanedSvg = svgContent.replace(/\\"/g, '"').replace(/\\'/g, "'");
 
-  if (!cleanedSvg.includes('width=') && !cleanedSvg.includes('height=')) {
-    cleanedSvg = cleanedSvg.replace(/<svg([^>]*)>/, `<svg$1 width="30px" height="30px">`);
+  // 移除 XML 声明（如果存在）
+  cleanedSvg = cleanedSvg.replace(/<\?xml[^>]*\?>/g, '').trim();
+
+  // 移除现有的 width 和 height 属性（如果存在）
+  cleanedSvg = cleanedSvg.replace(/width=["']?[^"'>\s]+["']?\s*/g, '');
+  cleanedSvg = cleanedSvg.replace(/height=["']?[^"'>\s]+["']?\s*/g, '');
+
+  // 在 svg 标签中添加固定的 width 和 height 属性（30x30像素）
+  cleanedSvg = cleanedSvg.replace(/<svg([^>]*)>/, `<svg$1 width="30px" height="30px">`);
+
+  // 确保 SVG 可以在 Markdown 中正确预览
+  // 添加 style 属性确保图标居中显示
+  if (!cleanedSvg.includes('style=')) {
+    cleanedSvg = cleanedSvg.replace(/<svg([^>]*)>/, `<svg$1 style="display: inline-block; vertical-align: middle;">`);
   }
+
+  // 移除可能存在的 DOCTYPE 声明
+  cleanedSvg = cleanedSvg.replace(/<!DOCTYPE[^>]*>/g, '').trim();
+
+  // 处理换行符和多余空格
+  cleanedSvg = cleanedSvg
+    .replace(/\n/g, '')
+    .replace(/\r/g, '')
+    .trim();
 
   return cleanedSvg;
 }
@@ -963,5 +1090,7 @@ function cleanSvgContent(svgContent) {
 module.exports = {
   generateIcon,
   AI_MODELS,
+  searchIconFromLibrary,
+  searchIconFromIconify,
 };
 

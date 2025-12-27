@@ -95,22 +95,22 @@ app.get('/api/icons/search', async (req, res) => {
         // style: 'ant-design' 只搜索 Ant Design
         // 未指定或 'default' 则两者都搜索
         if (!style || style === 'default') {
-          // 两者都搜索
-          const elementPlusIcons = await getElementPlusIcons(searchName);
-          const antDesignIcons = await getAntDesignIcons(searchName);
+          // 两者都搜索，使用本地资源
+          const elementPlusIcons = await getElementPlusIcons(searchName, true);
+          const antDesignIcons = await getAntDesignIcons(searchName, undefined, true);
           allIcons.push(...elementPlusIcons, ...antDesignIcons);
         } else if (style === 'element-plus') {
-          // 只搜索 Element Plus
-          const elementPlusIcons = await getElementPlusIcons(searchName);
+          // 只搜索 Element Plus，使用本地资源
+          const elementPlusIcons = await getElementPlusIcons(searchName, true);
           allIcons.push(...elementPlusIcons);
         } else if (style === 'ant-design') {
-          // 只搜索 Ant Design
-          const antDesignIcons = await getAntDesignIcons(searchName);
+          // 只搜索 Ant Design，使用本地资源
+          const antDesignIcons = await getAntDesignIcons(searchName, undefined, true);
           allIcons.push(...antDesignIcons);
         } else {
-          // 无效的 style 参数，两者都搜索
-          const elementPlusIcons = await getElementPlusIcons(searchName);
-          const antDesignIcons = await getAntDesignIcons(searchName);
+          // 无效的 style 参数，两者都搜索，使用本地资源
+          const elementPlusIcons = await getElementPlusIcons(searchName, true);
+          const antDesignIcons = await getAntDesignIcons(searchName, undefined, true);
           allIcons.push(...elementPlusIcons, ...antDesignIcons);
         }
 

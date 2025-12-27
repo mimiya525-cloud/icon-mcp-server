@@ -24,6 +24,29 @@ function toCamelCase(str) {
 }
 
 /**
+ * 处理图标名称，使其符合搜索要求
+ * @param {string} name - 原始图标名称
+ * @returns {string} 处理后的图标名称
+ */
+function processIconName(name) {
+  if (!name) return name;
+
+  // 转换为小写
+  let processedName = name.toLowerCase();
+
+  // 去掉 Outlined 和 Filled 后缀
+  processedName = processedName.replace(/(outlined|filled)$/g, '');
+
+  // 将驼峰命名转换为短横线分隔的命名
+  processedName = processedName.replace(/([a-z])([A-Z])/g, '$1-$2').toLowerCase();
+
+  // 移除多余的空格
+  processedName = processedName.trim();
+
+  return processedName;
+}
+
+/**
  * 移除SVG中的XML声明和其他可能干扰显示的内容，并设置默认宽高和样式
  * @param {string} svgContent - 原始SVG内容
  * @returns {string} 清理后的SVG内容
@@ -98,9 +121,12 @@ async function getElementPlusIcons(name, useLocal) {
       // 从本地获取图标
       const files = fs.readdirSync(LOCAL_ELEMENT_PLUS_PATH);
 
+      // 处理搜索名称
+      const processedName = processIconName(name);
+
       // 过滤出SVG文件并进行模糊匹配
       const matchedIcons = files
-        .filter(file => file.endsWith('.svg') && file.toLowerCase().includes(name.toLowerCase()))
+        .filter(file => file.endsWith('.svg') && file.toLowerCase().includes(processedName))
         .map(file => ({
           source: 'Element Plus',
           name: toCamelCase(file.replace('.svg', '')),
@@ -129,9 +155,12 @@ async function getElementPlusIcons(name, useLocal) {
       const response = await axios.get(ELEMENT_PLUS_REPO_URL);
       const files = response.data;
 
+      // 处理搜索名称
+      const processedName = processIconName(name);
+
       // 过滤出SVG文件并进行模糊匹配
       const matchedIcons = files
-        .filter(file => file.name.endsWith('.svg') && file.name.toLowerCase().includes(name.toLowerCase()))
+        .filter(file => file.name.endsWith('.svg') && file.name.toLowerCase().includes(processedName))
         .map(file => ({
           source: 'Element Plus',
           name: toCamelCase(file.name.replace('.svg', '')),
@@ -185,9 +214,12 @@ async function getAntDesignIconsByFormat(name, url, format, useLocal = false) {
       // 从本地获取图标
       const files = fs.readdirSync(localPath);
 
+      // 处理搜索名称
+      const processedName = processIconName(name);
+
       // 过滤出SVG文件并进行模糊匹配
       const matchedIcons = files
-        .filter(file => file.endsWith('.svg') && file.toLowerCase().includes(name.toLowerCase()))
+        .filter(file => file.endsWith('.svg') && file.toLowerCase().includes(processedName))
         .map(file => ({
           source: 'Ant Design',
           name: toCamelCase(file.replace('.svg', '')),
@@ -216,9 +248,12 @@ async function getAntDesignIconsByFormat(name, url, format, useLocal = false) {
       const response = await axios.get(url);
       const files = response.data;
 
+      // 处理搜索名称
+      const processedName = processIconName(name);
+
       // 过滤出SVG文件并进行模糊匹配
       const matchedIcons = files
-        .filter(file => file.name.endsWith('.svg') && file.name.toLowerCase().includes(name.toLowerCase()))
+        .filter(file => file.name.endsWith('.svg') && file.name.toLowerCase().includes(processedName))
         .map(file => ({
           source: 'Ant Design',
           name: toCamelCase(file.name.replace('.svg', '')),

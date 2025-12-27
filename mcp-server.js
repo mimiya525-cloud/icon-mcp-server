@@ -81,20 +81,52 @@ server.tool(
     // 对每个名称进行搜索
     for (const name of nameArray) {
       try {
-        if (prefix === 'element-plus') {
-          // 只查询Element Plus图标
-          const elementPlusIcons = await getElementPlusIcons(name, useLocal);
-          allIcons.push(...elementPlusIcons);
-        } else if (prefix === 'ant-design') {
-          // 只查询Ant Design图标
-          const antDesignIcons = await getAntDesignIcons(name, format, useLocal);
-          allIcons.push(...antDesignIcons);
+        let iconsFound = [];
+
+        // 检查名称是否包含空格
+        if (name.includes(' ')) {
+          // 先将空格替换为短横线进行查询
+          const hyphenatedName = name.replace(/\s+/g, '-');
+
+          if (prefix === 'element-plus') {
+            iconsFound = await getElementPlusIcons(hyphenatedName, useLocal);
+          } else if (prefix === 'ant-design') {
+            iconsFound = await getAntDesignIcons(hyphenatedName, format, useLocal);
+          } else {
+            const elementPlusIcons = await getElementPlusIcons(hyphenatedName, useLocal);
+            const antDesignIcons = await getAntDesignIcons(hyphenatedName, format, useLocal);
+            iconsFound = [...elementPlusIcons, ...antDesignIcons];
+          }
+
+          // 如果没有找到结果，则分别查询每个单词
+          if (iconsFound.length === 0) {
+            const words = name.split(/\s+/).filter(word => word.length > 0);
+            for (const word of words) {
+              if (prefix === 'element-plus') {
+                iconsFound.push(...(await getElementPlusIcons(word, useLocal)));
+              } else if (prefix === 'ant-design') {
+                iconsFound.push(...(await getAntDesignIcons(word, format, useLocal)));
+              } else {
+                const elementPlusIcons = await getElementPlusIcons(word, useLocal);
+                const antDesignIcons = await getAntDesignIcons(word, format, useLocal);
+                iconsFound.push(...elementPlusIcons, ...antDesignIcons);
+              }
+            }
+          }
         } else {
-          // 查询两个图标库
-          const elementPlusIcons = await getElementPlusIcons(name, useLocal);
-          const antDesignIcons = await getAntDesignIcons(name, format, useLocal);
-          allIcons.push(...elementPlusIcons, ...antDesignIcons);
+          // 普通名称查询
+          if (prefix === 'element-plus') {
+            iconsFound = await getElementPlusIcons(name, useLocal);
+          } else if (prefix === 'ant-design') {
+            iconsFound = await getAntDesignIcons(name, format, useLocal);
+          } else {
+            const elementPlusIcons = await getElementPlusIcons(name, useLocal);
+            const antDesignIcons = await getAntDesignIcons(name, format, useLocal);
+            iconsFound = [...elementPlusIcons, ...antDesignIcons];
+          }
         }
+
+        allIcons.push(...iconsFound);
       } catch (error) { }
     }
 
@@ -119,11 +151,11 @@ server.tool(
 // 6. 注册generate_icon工具
 server.tool(
   'generate_icon',
-  '通过大模型生成图标，支持多种国产AI模型（通义千问、文心一言、智谱AI、Kimi、豆包等）',
+  '通过大模型生成图标，支持多种国产AI模型（通义千问、豆包等）',
   {
-    description: z.string().describe('图标的描述，例如: "一个红色的删除按钮图标"'),
+    description: z.string().describe('图标的描述，例如: "一个删除按钮图标"'),
     style: z.string().optional().default('default').describe('图标风格，可选值: "element-plus", "ant-design", "default"'),
-    model: z.string().optional().describe('指定使用的AI模型，可选值: "openai", "tongyi", "wenxin", "zhipu", "kimi", "doubao"。如果不指定，将自动选择可用的模型'),
+    model: z.string().optional().describe('指定使用的AI模型，可选值: "tongyi", "doubao"。如果不指定，将自动选择可用的模型'),
   },
   async ({ description, style = 'default', model = null }) => {
     if (!description) {
@@ -134,15 +166,36 @@ server.tool(
     }
 
     try {
-      const generatedIcon = await generateIcon(description, style, model);
+      const generatedIcons = await generateIcon(description, style, model);
+
+      // 生成 markdown 表格
+      let markdown = '| 图标来源 | 图标svg代码 |\n';
+      markdown += '|---------|-------------|\n';
+
+      // 添加表格内容
+      generatedIcons.forEach(icon => {
+        const source = icon.source || '-';
+        const svgCode = (icon.rawSvg || icon.svg || '-')
+          .replace(/\n/g, '')
+          .replace(/\r/g, '')
+          .trim();
+
+        markdown += `| ${source} | ${svgCode} |\n`;
+      });
 
       return {
-        content: [{ type: "text", text: JSON.stringify(generatedIcon) }],
-        data: generatedIcon
+        content: [
+          {
+            type: "text",
+            text: markdown
+          }
+        ],
+        data: generatedIcons,
+        isError: false,
       };
     } catch (error) {
       return {
-        content: [{ type: "text", text: JSON.stringify({ error: error.message }) }],
+        content: [{ type: "text", text: `生成图标失败: ${error.message}` }],
         isError: true,
       };
     }
