@@ -12,102 +12,200 @@ const AI_MODELS = {
 
 /**
  * 通过大模型生成图标
- * @param {string} description - 图标描述
- * @param {string} style - 图标风格 (element-plus, ant-design, default)
+ * @param {string} description - 图标描述或类别
+ * @param {string} prefix - 图标库前缀 (element-plus, ant-design, default)
  * @param {string} model - 指定使用的 AI 模型，如果不指定则自动选择
+ * @param {string} name - 图标名称，可选，用于本地图标库查询
  * @returns {Promise<Array>} 生成的图标数组，格式与查询接口一致
  */
-async function generateIcon(description, style = 'default', model = null) {
+async function generateIcon(description, prefix = 'default', model = null, name = null) {
   try {
-    // logger.info('Generating icon with AI model', { description, style, model });
-
-    // 生成图标名称（基于描述）
-    const iconName = generateIconName(description);
     const allIcons = [];
+    let searchName = name || generateIconName(description);
 
-    // 1. 尝试使用 AI 生成图标（如果有可用的模型）
-    let aiIcon = null;
-    try {
-      // 使用 AI 生成 SVG 代码
-      const svgContent = await generateSVGCode(description, style, model);
-      const usedModel = model || selectAvailableModel();
-
-      // 验证生成的 SVG 是否有效
-      if (svgContent && isValidSVG(svgContent)) {
-        aiIcon = {
-          code: 0,
-          source: 'AI生成',
-          name: iconName,
-          svg: svgContent,
-          rawSvg: cleanSvgContent(svgContent),
-          description: description,
-          style: style,
-          model: usedModel,
-        };
-        allIcons.push(aiIcon);
+    // 1. 优先使用名称从本地图标库查询
+    if (searchName) {
+      let localIcons = [];
+      
+      // 根据 prefix 决定搜索哪些图标库
+      if (prefix === 'element-plus') {
+        // 只搜索 Element Plus
+        localIcons = await getElementPlusIcons(searchName, true);
+      } else if (prefix === 'ant-design') {
+        // 只搜索 Ant Design
+        localIcons = await getAntDesignIcons(searchName, undefined, true);
+      } else {
+        // 搜索两个图标库
+        const elementPlusIcons = await getElementPlusIcons(searchName, true);
+        const antDesignIcons = await getAntDesignIcons(searchName, undefined, true);
+        
+        // 分别取一个匹配的图标
+        if (elementPlusIcons.length > 0) {
+          localIcons.push(elementPlusIcons[0]);
+        }
+        if (antDesignIcons.length > 0) {
+          localIcons.push(antDesignIcons[0]);
+        }
       }
-    } catch (error) {
-      // AI 生成失败，忽略并继续使用 Iconify
-    }
 
-    // 2. 从 Iconify 搜索图标
-    const iconifyIcons = await searchIconFromIconify(description);
-    allIcons.push(...iconifyIcons);
-
-    // 3. 确保返回 3 个图标（如果可能）
-    if (allIcons.length < 3) {
-      // 如果没有足够的图标，尝试从本地图标库搜索
-      const localIconsResult = await searchIconFromLibrary(description, style, true);
-      if (localIconsResult && localIconsResult.length > 0) {
-        // 添加本地图标到结果列表
-        allIcons.push(...localIconsResult.map(icon => ({
+      // 添加本地图标到结果列表
+      if (localIcons.length > 0) {
+        allIcons.push(...localIcons.map(icon => ({
           code: 0,
           source: icon.source === 'Ant Design' ? 'Ant Design' : 'Element Plus',
           name: icon.name,
           svg: icon.svg,
           rawSvg: icon.rawSvg || cleanSvgContent(icon.svg),
           description: description,
-          style: style,
+          style: prefix,
           model: 'local',
         })));
       }
     }
 
-    // 4. 如果还是不够，使用规则生成默认图标
-    while (allIcons.length < 3) {
-      const defaultSvg = generateSVGByRules(description, style);
+    // 2. 如果本地图标库没有结果，尝试使用 AI 生成图标
+    if (allIcons.length === 0) {
+      let aiIcon = null;
+      try {
+        // 使用 AI 生成 SVG 代码
+        const svgContent = await generateSVGCode(description, prefix, model);
+        const usedModel = model || selectAvailableModel();
+
+        // 验证生成的 SVG 是否有效
+        if (svgContent && isValidSVG(svgContent)) {
+          aiIcon = {
+            code: 0,
+            source: 'AI生成',
+            name: searchName,
+            svg: svgContent,
+            rawSvg: cleanSvgContent(svgContent),
+            description: description,
+            style: prefix,
+            model: usedModel,
+          };
+          allIcons.push(aiIcon);
+        }
+      } catch (error) {
+        // AI 生成失败，忽略并继续使用 Iconify
+      }
+    }
+
+    // 3. 如果仍然没有结果，从 Iconify 搜索图标
+    if (allIcons.length === 0) {
+      const iconifyIcons = await searchIconFromIconify(name || description);
+      if (iconifyIcons.length > 0) {
+        allIcons.push(...iconifyIcons);
+      }
+    }
+
+    // 4. 如果还是没有结果，使用规则生成默认图标
+    if (allIcons.length === 0) {
+      const defaultSvg = generateSVGByRules(description, prefix);
       const defaultIcon = {
         code: -1,
         source: 'AI生成',
-        name: `${iconName}-default-${allIcons.length + 1}`,
+        name: searchName,
         svg: defaultSvg,
         rawSvg: cleanSvgContent(defaultSvg),
         description: description,
-        style: style,
+        style: prefix,
         model: 'default',
       };
       allIcons.push(defaultIcon);
     }
 
-    // 返回前 3 个图标
-    return allIcons.slice(0, 3);
+    // 返回所有找到的图标，不需要强制补全 3 个
+    return allIcons;
   } catch (error) {
     // logger.error('Failed to generate icon', { error: error.message, stack: error.stack });
     // 如果所有方法都失败，返回默认图标
-    const iconName = generateIconName(description);
-    const defaultSvg = generateSVGByRules(description, style);
+    const searchName = name || generateIconName(description);
+    const defaultSvg = generateSVGByRules(description, prefix);
     return [
       {
         code: -1,
         source: 'AI生成',
-        name: iconName,
+        name: searchName,
         svg: defaultSvg,
         rawSvg: cleanSvgContent(defaultSvg),
         description: description,
-        style: style,
+        style: prefix,
         model: 'default',
       }
     ];
+  }
+}
+
+/**
+ * 根据类别批量生成图标
+ * @param {string} category - 图标类别
+ * @param {number} count - 生成数量
+ * @param {string} prefix - 图标库前缀
+ * @param {string} model - AI 模型
+ * @returns {Promise<Array>} 生成的图标数组
+ */
+async function generateIconsByCategory(category, count = 3, prefix = 'default', model = null) {
+  try {
+    // 使用 AI 生成该类别下的具体图标关键词
+    const iconKeywords = await generateIconKeywords(category, count);
+    const allIcons = [];
+
+    // 为每个关键词生成图标
+    for (const keyword of iconKeywords) {
+      const iconDescription = `${category}图标：${keyword}`;
+      try {
+        // 生成单个图标
+        const generatedIcons = await generateIcon(iconDescription, prefix, model, keyword);
+        if (generatedIcons && generatedIcons.length > 0) {
+          // 取第一个生成的图标
+          allIcons.push(generatedIcons[0]);
+        }
+      } catch (error) {
+        console.error(`生成${keyword}图标失败:`, error);
+        continue;
+      }
+
+      // 如果已经生成了足够数量的图标，停止
+      if (allIcons.length >= count) {
+        break;
+      }
+    }
+
+    // 如果生成的图标数量不足，使用默认图标补充
+    while (allIcons.length < count) {
+      const defaultSvg = generateSVGByRules(category, prefix);
+      const defaultIcon = {
+        code: -1,
+        source: 'AI生成',
+        name: `${generateIconName(category)}-${allIcons.length + 1}`,
+        svg: defaultSvg,
+        rawSvg: cleanSvgContent(defaultSvg),
+        description: `${category}图标`,
+        style: prefix,
+        model: 'default',
+      };
+      allIcons.push(defaultIcon);
+    }
+
+    return allIcons;
+  } catch (error) {
+    console.error('批量生成图标失败:', error);
+    // 返回默认图标
+    const defaultIcons = [];
+    for (let i = 0; i < count; i++) {
+      const defaultSvg = generateSVGByRules(category, prefix);
+      defaultIcons.push({
+        code: -1,
+        source: 'AI生成',
+        name: `${generateIconName(category)}-default-${i + 1}`,
+        svg: defaultSvg,
+        rawSvg: cleanSvgContent(defaultSvg),
+        description: `${category}图标`,
+        style: prefix,
+        model: 'default',
+      });
+    }
+    return defaultIcons;
   }
 }
 
@@ -439,6 +537,96 @@ function cleanSvgContent(svgContent) {
     .trim();
 
   return cleanedSvg;
+}
+
+/**
+ * 解析用户输入，提取图标类别、数量和其他参数
+ */
+function parseUserInput(input) {
+  // 默认值
+  const result = {
+    category: '',
+    count: 1,
+    style: 'default',
+    model: null
+  };
+
+  // 将输入转换为小写
+  const lowerInput = input.toLowerCase();
+
+  // 提取数量
+  const countMatch = lowerInput.match(/(\d+)个/);
+  if (countMatch) {
+    result.count = parseInt(countMatch[1]);
+  }
+
+  // 提取风格
+  if (lowerInput.includes('element-plus') || lowerInput.includes('element plus')) {
+    result.style = 'element-plus';
+  } else if (lowerInput.includes('ant-design') || lowerInput.includes('ant design')) {
+    result.style = 'ant-design';
+  }
+
+  // 提取模型
+  if (lowerInput.includes('tongyi') || lowerInput.includes('通义')) {
+    result.model = 'tongyi';
+  } else if (lowerInput.includes('doubao') || lowerInput.includes('豆包')) {
+    result.model = 'doubao';
+  }
+
+  // 提取类别（移除数量和其他参数）
+  result.category = lowerInput
+    .replace(/\d+个/g, '') // 移除数量
+    .replace(/element\-?plus/g, '') // 移除风格
+    .replace(/ant\-?design/g, '') // 移除风格
+    .replace(/tongyi|通义|doubao|豆包/g, '') // 移除模型
+    .replace(/(图标|icon)/g, '') // 移除图标字样
+    .trim();
+
+  return result;
+}
+
+/**
+ * 使用AI理解大类描述并生成相关图标关键词
+ */
+async function generateIconKeywords(category, count = 3) {
+  try {
+    const prompt = `请将"${category}"这个图标类别扩展为${count}个具体的图标名称，要求：
+1. 每个图标名称简洁明了
+2. 直接相关于${category}
+3. 只需要中文名称，不需要英文
+4. 用逗号分隔
+5. 不要添加任何解释
+
+例如：
+类别：办公类
+输出：文件,编辑,保存,删除,新建,搜索,打印,设置,用户,菜单`;
+
+    // 选择可用的AI模型
+    const model = selectAvailableModel();
+    let keywordsText = '';
+
+    if (model === AI_MODELS.TONGYI) {
+      keywordsText = await generateWithTongyi(prompt);
+    } else if (model === AI_MODELS.DOUBAO) {
+      keywordsText = await generateWithDoubao(prompt);
+    } else {
+      // 如果没有可用的AI模型，返回默认关键词
+      return ['默认图标'];
+    }
+
+    // 解析生成的关键词
+    const keywords = keywordsText
+      .split(',')
+      .map(keyword => keyword.trim())
+      .filter(keyword => keyword.length > 0)
+      .slice(0, count);
+
+    return keywords;
+  } catch (error) {
+    console.error('生成图标关键词失败:', error);
+    return ['默认图标'];
+  }
 }
 
 /**
@@ -1087,8 +1275,86 @@ function cleanSvgContent(svgContent) {
   return cleanedSvg;
 }
 
+/**
+ * 根据类别批量搜索图标
+ * @param {string} category - 图标类别
+ * @param {number} count - 搜索数量
+ * @param {string} style - 图标风格
+ * @param {string} prefix - 图标库前缀（element-plus, ant-design）
+ * @param {string} format - Ant Design图标格式（outlined, filled）
+ * @param {boolean} useLocal - 是否使用本地资源
+ * @returns {Promise<Array>} 搜索到的图标数组
+ */
+async function searchIconsByCategory(category, count = 10, style = 'default', prefix = null, format = null, useLocal = false) {
+  try {
+    // 使用 AI 生成该类别下的具体图标关键词
+    const iconKeywords = await generateIconKeywords(category, count);
+    const allIcons = [];
+    const usedKeywords = new Set();
+
+    // 为每个关键词搜索图标
+    for (const keyword of iconKeywords) {
+      if (usedKeywords.has(keyword)) {
+        continue;
+      }
+      usedKeywords.add(keyword);
+
+      try {
+        // 根据风格和前缀确定搜索的图标库
+        let iconsFound = [];
+        const searchDescription = `${category} ${keyword}`;
+
+        // 1. 先从本地图标库搜索
+        if (prefix === 'element-plus' || style === 'element-plus') {
+          iconsFound = await getElementPlusIcons(keyword, useLocal);
+        } else if (prefix === 'ant-design' || style === 'ant-design') {
+          iconsFound = await getAntDesignIcons(keyword, format, useLocal);
+        } else {
+          // 搜索两个图标库
+          const elementPlusIcons = await getElementPlusIcons(keyword, useLocal);
+          const antDesignIcons = await getAntDesignIcons(keyword, format, useLocal);
+          iconsFound = [...elementPlusIcons, ...antDesignIcons];
+        }
+
+        // 2. 如果本地图标库没有找到，尝试从 Iconify 搜索
+        if (iconsFound.length === 0) {
+          const iconifyIcons = await searchIconFromIconify(searchDescription);
+          iconsFound = iconifyIcons.map(icon => ({
+            ...icon,
+            code: 0,
+            description: searchDescription,
+            style: style,
+            model: 'iconify'
+          }));
+        }
+
+        // 添加到结果列表
+        allIcons.push(...iconsFound);
+
+        // 如果已经找到足够数量的图标，停止
+        if (allIcons.length >= count) {
+          break;
+        }
+      } catch (error) {
+        console.error(`搜索${keyword}图标失败:`, error);
+        continue;
+      }
+    }
+
+    // 去重（基于 source 和 name）
+    const uniqueIcons = Array.from(new Map(allIcons.map((icon) => [`${icon.source}-${icon.name}`, icon])).values());
+
+    // 返回指定数量的图标
+    return uniqueIcons.slice(0, count);
+  } catch (error) {
+    console.error('批量搜索图标失败:', error);
+    return [];
+  }
+}
+
 module.exports = {
   generateIcon,
+  searchIconsByCategory,
   AI_MODELS,
   searchIconFromLibrary,
   searchIconFromIconify,

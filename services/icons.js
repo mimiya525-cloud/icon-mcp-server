@@ -53,16 +53,17 @@ function processIconName(name) {
  */
 function cleanSvgContent(svgContent) {
   // 移除转义符
-  let cleanedSvg = svgContent.replace(/\\"/g, '"').replace(/\\'/g, "'");
+  let cleanedSvg = svgContent.replace(/\"/g, '"').replace(/\'/g, "'");
 
   // 移除XML声明（如果存在）
   cleanedSvg = cleanedSvg.replace(/<\?xml[^>]*\?>/g, '').trim();
 
-  // 检查是否已有width和height属性
-  if (!cleanedSvg.includes('width=') && !cleanedSvg.includes('height=')) {
-    // 在svg标签中添加默认的width和height属性
-    cleanedSvg = cleanedSvg.replace(/<svg([^>]*)>/, `<svg$1 width="30px" height="30px">`);
-  }
+  // 移除现有的width和height属性
+  cleanedSvg = cleanedSvg.replace(/\s*width=["'][^"']*["']/g, '');
+  cleanedSvg = cleanedSvg.replace(/\s*height=["'][^"']*["']/g, '');
+
+  // 在svg标签中添加默认的width和height属性
+  cleanedSvg = cleanedSvg.replace(/<svg([^>]*)>/, `<svg$1 width="30" height="30">`);
 
   // 确保SVG可以在Markdown中正确预览
   // 添加style属性确保图标居中显示

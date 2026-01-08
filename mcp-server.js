@@ -154,10 +154,11 @@ server.tool(
   '通过大模型生成图标，支持多种国产AI模型（通义千问、豆包等）',
   {
     description: z.string().describe('图标的描述，例如: "一个删除按钮图标"'),
-    style: z.string().optional().default('default').describe('图标风格，可选值: "element-plus", "ant-design", "default"'),
+    name: z.string().optional().describe('图标的名称，可选，用于图标库查询，例如: "delete"'),
+    prefix: z.string().optional().default('default').describe('图标库前缀，可选值: "ant-design", "element-plus", "default"。如果不指定，将同时查询两个图标库'),
     model: z.string().optional().describe('指定使用的AI模型，可选值: "tongyi", "doubao"。如果不指定，将自动选择可用的模型'),
   },
-  async ({ description, style = 'default', model = null }) => {
+  async ({ description, name = null, prefix = 'default', model = null }) => {
     if (!description) {
       return {
         content: [{ type: "text", text: 'Description parameter is required' }],
@@ -166,7 +167,7 @@ server.tool(
     }
 
     try {
-      const generatedIcons = await generateIcon(description, style, model);
+      const generatedIcons = await generateIcon(description, prefix, model, name);
 
       // 生成 markdown 表格
       let markdown = '| 图标来源 | 图标svg代码 |\n';
