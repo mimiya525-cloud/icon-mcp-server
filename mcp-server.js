@@ -10,7 +10,7 @@ const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio
 /** Create server instance */
 const server = new McpServer({
   name: 'icon-mcp-server',
-  version: '1.1.0',
+  version: '1.4.0',
 });
 
 async function main() {
@@ -61,8 +61,9 @@ server.tool(
     prefix: z.string().optional().describe('图标库前缀，可选值: "ant-design", "element-plus"。如果不指定，将同时查询两个图标库'),
     format: z.string().optional().describe('Ant Design图标格式，可选值: "outlined", "filled"。如果不指定，将返回两种格式的图标'),
     useLocal: z.boolean().optional().default(false).describe('是否使用本地资源'),
+    exact: z.boolean().optional().default(false).describe('是否精确查询，当为true时，需要完全匹配图标名称'),
   },
-  async ({ names, prefix, format, useLocal }) => {
+  async ({ names, prefix, format, useLocal, exact }) => {
     if (!names) {
       return {
         content: [{ type: "text", text: 'Names parameter is required' }],
@@ -89,12 +90,12 @@ server.tool(
           const hyphenatedName = name.replace(/\s+/g, '-');
 
           if (prefix === 'element-plus') {
-            iconsFound = await getElementPlusIcons(hyphenatedName, useLocal);
+            iconsFound = await getElementPlusIcons(hyphenatedName, useLocal, exact);
           } else if (prefix === 'ant-design') {
-            iconsFound = await getAntDesignIcons(hyphenatedName, format, useLocal);
+            iconsFound = await getAntDesignIcons(hyphenatedName, format, useLocal, exact);
           } else {
-            const elementPlusIcons = await getElementPlusIcons(hyphenatedName, useLocal);
-            const antDesignIcons = await getAntDesignIcons(hyphenatedName, format, useLocal);
+            const elementPlusIcons = await getElementPlusIcons(hyphenatedName, useLocal, exact);
+            const antDesignIcons = await getAntDesignIcons(hyphenatedName, format, useLocal, exact);
             iconsFound = [...elementPlusIcons, ...antDesignIcons];
           }
 
@@ -103,12 +104,12 @@ server.tool(
             const words = name.split(/\s+/).filter(word => word.length > 0);
             for (const word of words) {
               if (prefix === 'element-plus') {
-                iconsFound.push(...(await getElementPlusIcons(word, useLocal)));
+                iconsFound.push(...(await getElementPlusIcons(word, useLocal, exact)));
               } else if (prefix === 'ant-design') {
-                iconsFound.push(...(await getAntDesignIcons(word, format, useLocal)));
+                iconsFound.push(...(await getAntDesignIcons(word, format, useLocal, exact)));
               } else {
-                const elementPlusIcons = await getElementPlusIcons(word, useLocal);
-                const antDesignIcons = await getAntDesignIcons(word, format, useLocal);
+                const elementPlusIcons = await getElementPlusIcons(word, useLocal, exact);
+                const antDesignIcons = await getAntDesignIcons(word, format, useLocal, exact);
                 iconsFound.push(...elementPlusIcons, ...antDesignIcons);
               }
             }
@@ -116,12 +117,12 @@ server.tool(
         } else {
           // 普通名称查询
           if (prefix === 'element-plus') {
-            iconsFound = await getElementPlusIcons(name, useLocal);
+            iconsFound = await getElementPlusIcons(name, useLocal, exact);
           } else if (prefix === 'ant-design') {
-            iconsFound = await getAntDesignIcons(name, format, useLocal);
+            iconsFound = await getAntDesignIcons(name, format, useLocal, exact);
           } else {
-            const elementPlusIcons = await getElementPlusIcons(name, useLocal);
-            const antDesignIcons = await getAntDesignIcons(name, format, useLocal);
+            const elementPlusIcons = await getElementPlusIcons(name, useLocal, exact);
+            const antDesignIcons = await getAntDesignIcons(name, format, useLocal, exact);
             iconsFound = [...elementPlusIcons, ...antDesignIcons];
           }
         }

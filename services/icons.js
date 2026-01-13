@@ -114,9 +114,10 @@ function iconsToMarkdownTable(icons) {
  * 从Element Plus获取图标信息
  * @param {string} name - 图标名称（模糊匹配）
  * @param {boolean} useLocal - 是否使用本地资源
+ * @param {boolean} exact - 是否精确查询
  * @returns {Promise<Array>} 匹配的图标数组
  */
-async function getElementPlusIcons(name, useLocal) {
+async function getElementPlusIcons(name, useLocal, exact) {
   try {
     if (useLocal) {
       // 从本地获取图标
@@ -125,9 +126,9 @@ async function getElementPlusIcons(name, useLocal) {
       // 处理搜索名称
       const processedName = processIconName(name);
 
-      // 过滤出SVG文件并进行模糊匹配
+      // 过滤出SVG文件并进行匹配
       const matchedIcons = files
-        .filter(file => file.endsWith('.svg') && file.toLowerCase().includes(processedName))
+        .filter(file => file.endsWith('.svg') && (exact ? file.replace('.svg', '').toLowerCase() === processedName : file.toLowerCase().includes(processedName)))
         .map(file => ({
           source: 'Element Plus',
           name: toCamelCase(file.replace('.svg', '')),
@@ -159,9 +160,9 @@ async function getElementPlusIcons(name, useLocal) {
       // 处理搜索名称
       const processedName = processIconName(name);
 
-      // 过滤出SVG文件并进行模糊匹配
+      // 过滤出SVG文件并进行匹配
       const matchedIcons = files
-        .filter(file => file.name.endsWith('.svg') && file.name.toLowerCase().includes(processedName))
+        .filter(file => file.name.endsWith('.svg') && (exact ? file.name.replace('.svg', '').toLowerCase() === processedName : file.name.toLowerCase().includes(processedName)))
         .map(file => ({
           source: 'Element Plus',
           name: toCamelCase(file.name.replace('.svg', '')),
@@ -197,9 +198,10 @@ async function getElementPlusIcons(name, useLocal) {
  * @param {string} url - 图标库URL
  * @param {string} format - 图标格式（Outlined/Filled）
  * @param {boolean} useLocal - 是否使用本地资源
+ * @param {boolean} exact - 是否精确查询
  * @returns {Promise<Array>} 匹配的图标数组
  */
-async function getAntDesignIconsByFormat(name, url, format, useLocal = false) {
+async function getAntDesignIconsByFormat(name, url, format, useLocal = false, exact = false) {    
   try {
     if (useLocal) {
       // 根据URL确定本地路径
@@ -218,9 +220,9 @@ async function getAntDesignIconsByFormat(name, url, format, useLocal = false) {
       // 处理搜索名称
       const processedName = processIconName(name);
 
-      // 过滤出SVG文件并进行模糊匹配
+      // 过滤出SVG文件并进行匹配
       const matchedIcons = files
-        .filter(file => file.endsWith('.svg') && file.toLowerCase().includes(processedName))
+        .filter(file => file.endsWith('.svg') && (exact ? file.replace('.svg', '').toLowerCase() === processedName : file.toLowerCase().includes(processedName)))
         .map(file => ({
           source: 'Ant Design',
           name: toCamelCase(file.replace('.svg', '')),
@@ -252,9 +254,9 @@ async function getAntDesignIconsByFormat(name, url, format, useLocal = false) {
       // 处理搜索名称
       const processedName = processIconName(name);
 
-      // 过滤出SVG文件并进行模糊匹配
+      // 过滤出SVG文件并进行匹配
       const matchedIcons = files
-        .filter(file => file.name.endsWith('.svg') && file.name.toLowerCase().includes(processedName))
+        .filter(file => file.name.endsWith('.svg') && (exact ? file.name.replace('.svg', '').toLowerCase() === processedName : file.name.toLowerCase().includes(processedName)))
         .map(file => ({
           source: 'Ant Design',
           name: toCamelCase(file.name.replace('.svg', '')),
@@ -289,24 +291,25 @@ async function getAntDesignIconsByFormat(name, url, format, useLocal = false) {
  * @param {string} name - 图标名称（模糊匹配）
  * @param {string} format - 图标格式，可选值: "outlined", "filled"。如果不指定，将返回两种格式的图标
  * @param {boolean} useLocal - 是否使用本地资源
+ * @param {boolean} exact - 是否精确查询
  * @returns {Promise<Array>} 匹配的图标数组
  */
-async function getAntDesignIcons(name, format, useLocal = false) {
+async function getAntDesignIcons(name, format, useLocal = false, exact = false) {
   try {
     // 根据format参数决定获取哪些格式的图标
     if (format === 'outlined') {
       // 只获取outlined格式的图标
-      const outlinedIcons = await getAntDesignIconsByFormat(name, ANT_DESIGN_REPO_URL, 'Outlined', useLocal);
+      const outlinedIcons = await getAntDesignIconsByFormat(name, ANT_DESIGN_REPO_URL, 'Outlined', useLocal, exact);
       return outlinedIcons;
     } else if (format === 'filled') {
       // 只获取filled格式的图标
-      const filledIcons = await getAntDesignIconsByFormat(name, ANT_DESIGN_REPO_URL2, 'Filled', useLocal);
+      const filledIcons = await getAntDesignIconsByFormat(name, ANT_DESIGN_REPO_URL2, 'Filled', useLocal, exact);
       return filledIcons;
     } else {
       // 同时获取outlined和filled格式的图标
       const [outlinedIcons, filledIcons] = await Promise.all([
-        getAntDesignIconsByFormat(name, ANT_DESIGN_REPO_URL, 'Outlined', useLocal),
-        getAntDesignIconsByFormat(name, ANT_DESIGN_REPO_URL2, 'Filled', useLocal)
+        getAntDesignIconsByFormat(name, ANT_DESIGN_REPO_URL, 'Outlined', useLocal, exact),
+        getAntDesignIconsByFormat(name, ANT_DESIGN_REPO_URL2, 'Filled', useLocal, exact)
       ]);
 
       // 合并两种格式的图标
